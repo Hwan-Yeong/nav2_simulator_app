@@ -5,3 +5,5 @@ docs/
 *.egg-info
 build/
 dist/
+scripts/
+.github/

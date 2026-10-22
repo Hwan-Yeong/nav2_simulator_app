@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
 """Build the Nav Studio user guide: guide.html -> Nav_Studio_User_Guide.pdf + page PNGs (pages/).
 
-Screenshots come from tests/capture_guide.py (img/, with element boxes in img/boxes.json for the callouts).
+Screenshots come from scripts/capture_guide.py (img/, with element boxes in img/boxes.json for the callouts).
+The version comes from navstudio/__init__.py, the date from its CHANGELOG section. guide.stamp.json records what the
+PDF was built from, so scripts/check.py --release can tell when it is out of date.
 python3 docs/guide/build_guide.py
 """
+import datetime
 import html
 import json
 import os
+import re
+import sys
 
 from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.realpath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
 IMG = os.path.join(HERE, 'img')
 BOXES = json.load(open(os.path.join(IMG, 'boxes.json')))
-VERSION, DATE = '0.1.0', '2026-10-22'
+VERSION = re.search(r'__version__\s*=\s*"([^"]+)"', open(os.path.join(ROOT, 'navstudio', '__init__.py')).read()).group(1)
+_rel = re.search(rf'^## \[{re.escape(VERSION)}\] - (\S+)', open(os.path.join(ROOT, 'CHANGELOG.md')).read(), re.M)
+DATE = _rel.group(1) if _rel else datetime.date.today().isoformat() + ' (미출시)'
 
 
 def shot(name, callouts=(), caption='', cls='shot'):
@@ -52,15 +60,15 @@ PAGES.append(f'''
   <div class="cover-top">
     <div class="brand"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M16 16 L26 11" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="16" r="2.8" fill="currentColor"/></svg>Everybot</div>
     <h1>Nav Studio<br><span>사용 가이드</span></h1>
-    <p class="lead">브라우저에서 실제 Nav2 스택으로 로봇 주행을 시뮬레이션하고,<br>설정을 벤치마크로 비교하고, 파라미터를 자동으로 튜닝합니다.</p>
+    <p class="lead">브라우저에서 실제 Nav2 스택으로 로봇 주행을 시뮬레이션하고,<br>설정 여러 개를 나란히 띄워 비교하고, 벤치마크와 자동 튜닝으로 검증합니다.</p>
     <div class="meta">버전 {VERSION} · {DATE}</div>
   </div>
-  {shot('sim_overview.png', cls='hero')}
+  {shot('sim_compare.png', cls='hero')}
   <div class="cover-grid">
     <div><b>시뮬레이션</b><span>맵·장애물·보행자를 놓고 실시간 주행</span></div>
+    <div><b>동시 실행 비교</b><span>설정 2~4개를 나란히, 같은 순간에 출발</span></div>
     <div><b>로봇 설계</b><span>구동 방식·외곽·라이다를 끌어서 편집</span></div>
-    <div><b>벤치마크</b><span>여러 설정을 같은 시나리오로 비교</span></div>
-    <div><b>자동 튜닝</b><span>Optuna 로 파라미터 조합 탐색</span></div>
+    <div><b>벤치마크 · 튜닝</b><span>통계로 비교하고 Optuna 로 탐색</span></div>
   </div>
 </section>''')
 
@@ -80,7 +88,7 @@ PAGES.append('''
   </div>
   <h3>작업 공간</h3>
   <table class="tbl">
-    <tr><th>시뮬레이션</th><td>맵을 고르고 목표를 찍으면 로봇이 주행합니다. 박스·기둥·의자·보행자를 실행 중에 놓을 수 있고, costmap·경로·라이다·속도·장애물 이격거리를 실시간으로 봅니다. 파라미터를 바꾸면 Nav2 를 다시 띄워 적용합니다.</td></tr>
+    <tr><th>시뮬레이션</th><td>맵을 고르고 목표를 찍으면 로봇이 주행합니다. 박스·기둥·의자·보행자를 실행 중에 놓을 수 있고, costmap·경로·라이다·속도·장애물 이격거리를 실시간으로 봅니다. 파라미터를 바꾸면 Nav2 를 다시 띄워 적용합니다. <b>동시 실행</b> 으로 설정이 다른 시뮬레이션을 최대 4개 나란히 띄워 비교하고, 스택과 파라미터 묶음은 <b>설정 세트</b> 로 저장합니다.</td></tr>
     <tr><th>로봇 설계</th><td>구동 방식(차동 · 전방향 · 차량형), 외곽(footprint), 라이다 위치·방향·시야각, 물리 한계를 정합니다. 여기서 정한 값으로 시뮬레이터와 Nav2 설정이 자동으로 만들어집니다.</td></tr>
     <tr><th>벤치마크</th><td>최대 4개 설정을 같은 시나리오(정상 · 맵에 없는 장애물 · 보행자)로 반복 주행해 성공률, 충돌, 속도, 이격, 복구 횟수를 비교합니다.</td></tr>
     <tr><th>자동 튜닝</th><td>고른 파라미터의 범위 안에서 점수가 가장 높은 조합을 찾습니다. 찾은 값은 바로 적용하거나 다른 맵에서 검증합니다.</td></tr>
@@ -147,10 +155,10 @@ PAGES.append('''
     ('작업 공간 전환', '시뮬레이션 · 로봇 설계 · 벤치마크 · 자동 튜닝'),
     ('현재 설정과 상태', '맵 · 로봇 · 스택(변경 개수), 실행 상태(정지됨 / 시작 중 / 실행 중 / 오류)'),
     ('시작 · 변경 적용', '정지 상태면 “시뮬레이션 시작”, 설정을 바꾸면 “변경 적용 (재시작)” 으로 바뀝니다'),
-    ('왼쪽 패널', '맵 고르기·시나리오 불러오기 / 로봇·스택·튜닝 프리셋 / 파라미터 조정'),
+    ('왼쪽 패널', '맵 고르기·추가·시나리오 불러오기 / 로봇·스택·설정 세트 / 파라미터 조정'),
     ('편집 도구', '선택 · 화면 이동 · 출발점 · 목표 · 박스 · 기둥 · 의자 · 보행자 · 지우개'),
     ('레이어', '전역·지역 costmap, 라이다 점, 경로, 지나온 궤적, 격자. 오른쪽 끝 버튼은 맵 전체 보기'),
-    ('주행 막대', '주행(현재 목표로 다시 보내기) · 정지 · 출발점으로 · 로봇 따라가기 · 장애물 모두 지우기'),
+    ('주행 막대', '동시 실행 개수(1~4) · 주행(현재 목표로 다시 보내기) · 정지 · 출발점으로 · 로봇 따라가기 · 장애물 모두 지우기'),
     ('주행 상태', '대기 / 주행 중 / 도착 / 실패, 남은 거리, 복구 동작 횟수, 아래에 속도·이격 그래프와 이번 주행 기록'),
     ('Nav2 메시지', 'Nav2 노드의 경고·오류를 실시간으로 보여 줍니다. “실행 로그” 는 전체 출력'),
   ]) + '''
@@ -162,7 +170,7 @@ PAGES.append('''
 <section class="page">
   <header class="ph"><span>04</span>시뮬레이션 따라하기</header>
   <ol class="steps compact">
-    <li><b>맵 고르기</b> — 왼쪽 <b>맵</b> 탭에서 맵 카드를 누릅니다. 아래 시나리오 목록에서 미리 만든 상황(정상 · 미등록 장애물 · 보행자)을 불러올 수도 있습니다.</li>
+    <li><b>맵 고르기</b> — 왼쪽 <b>맵</b> 탭에서 맵 카드를 누릅니다 (내 맵은 <b>맵 추가</b> 로, 10쪽). 아래 시나리오 목록에서 미리 만든 상황(정상 · 미등록 장애물 · 보행자)을 불러올 수도 있습니다.</li>
     <li><b>시작</b> — 오른쪽 위 <b>시뮬레이션 시작</b>. 약 4초 뒤 “실행 중” 이 됩니다. 차량형 로봇은 약 12초 걸립니다.</li>
     <li><b>출발점</b> — 출발점 도구(<kbd>S</kbd>)로 지도를 누른 채 끌면 로봇이 그 자리·방향으로 옮겨집니다.</li>
     <li><b>목표</b> — 목표 도구(<kbd>G</kbd>)로 누른 채 끌어 도착 방향을 정하면 바로 출발합니다.</li>
@@ -181,12 +189,12 @@ PAGES.append('''
   </table>
 </section>''')
 
-# ---------------------------------------------------------------- 6. parameters
+# ---------------------------------------------------------------- 6. parameters + config sets
 PAGES.append('''
 <section class="page">
-  <header class="ph"><span>05</span>파라미터 조정</header>
-  ''' + shot('params.png', [('stackchip', 1, 'bc', True), ('changed', 2, 'tl', True), ('start', 3, 'bl')]) + legend([
-    ('변경 개수', '상단 스택 칩과 파라미터 탭 제목 옆에 바꾼 항목 수가 표시됩니다'),
+  <header class="ph"><span>05</span>파라미터와 설정 세트</header>
+  ''' + shot('params.png', [('setbar', 1, 'bc', True), ('changed', 2, 'tl', True), ('start', 3, 'bl')]) + legend([
+    ('설정 세트', '지금 쓰는 세트 이름. 값을 바꾸면 “(수정됨)” 이 붙습니다. 저장 버튼으로 이름 붙여 저장합니다'),
     ('바꾼 항목', '파란 배경과 점으로 표시됩니다. 오른쪽 되돌리기 버튼으로 기본값 복원. 아래 회색 글씨는 실제 Nav2 파라미터 경로'),
     ('변경 적용 (재시작)', '누르면 같은 장면으로 Nav2 를 다시 띄웁니다 (약 4초)'),
   ]) + '''
@@ -194,21 +202,52 @@ PAGES.append('''
     <div>
       <h3>항목 구성</h3>
       <p>선택한 스택(제어기·경로 계획기)에 맞는 항목만 보입니다: 속도·가속, DWB 평가 가중치, MPPI, Pure Pursuit, Costmap, 경로 계획, 목표·진행 판정. 검색창과 <b>변경만</b> 버튼으로 찾습니다.</p>
-      <h3>스택과 프리셋</h3>
-      <p><b>로봇·스택</b> 탭에서 제어기·경로 계획기 조합을 고릅니다 (운영 설정, 표준 Nav2, MPPI, Pure Pursuit, 차량형). 튜닝 프리셋을 누르면 미리 검증한 값이 파라미터에 들어갑니다.</p>
-      <h3>고급 오버라이드</h3>
-      <p>목록에 없는 Nav2 파라미터는 <b>고급 오버라이드</b> 에 YAML 로 적습니다. 예: <code>controller_server: {FollowPath.max_vel_x: 0.3}</code></p>
+      <h3>설정 세트</h3>
+      <p><b>설정 세트</b> 는 주행 스택과 바꾼 파라미터를 묶은 것입니다. <b>저장</b> 을 누르고 이름을 적으면 <b>로봇·스택</b> 탭 목록에 들어가고, 동시 실행 슬롯과 벤치마크에서 이름으로 고를 수 있습니다. 같은 이름이면 덮어쓸지 묻습니다. 기본 세트 <i>튜닝안 A·B</i> 는 검증 분석에서 나온 값이고 지울 수 없습니다.</p>
+      <h3>고급 오버라이드 · YAML</h3>
+      <p>목록에 없는 Nav2 파라미터는 <b>고급 오버라이드</b> 에 YAML 로 적습니다. 예: <code>controller_server: {FollowPath.max_vel_x: 0.3}</code>. <b>YAML 미리보기</b> 는 운영 기본값 대비 바뀐 줄과 최종 Nav2 params 를 보여 주고, 실제 로봇에 쓸 파일로 저장할 수 있습니다.</p>
     </div>
     <div>
-      ''' + shot('yaml_diff.png', [], '<b>YAML 미리보기</b>: 운영 기본값 대비 바뀐 줄과 최종 Nav2 params 전체. “YAML 저장” 으로 실제 로봇에 쓸 파일을 받습니다.', 'shot small') + '''
+      ''' + shot('setup_sets.png', [], '로봇·스택 탭: 로봇, 주행 스택, 설정 세트 목록. 세트를 누르면 그 스택과 값이 들어오고, 내 세트는 휴지통으로 지웁니다.', 'shot small') + '''
     </div>
+  </div>
+</section>''')
+
+# ---------------------------------------------------------------- 7. comparison
+PAGES.append('''
+<section class="page">
+  <header class="ph"><span>06</span>동시 실행 비교</header>
+  <p>설정 여러 개의 거동을 한 화면에서 나란히 봅니다. 맵 · 로봇 · 장면(출발점, 목표, 장애물, 보행자)은 모든 슬롯이 같이 쓰고, 슬롯마다 주행 스택과 파라미터가 다릅니다. 화면 하나하나가 따로 도는 Nav2 입니다.</p>
+  ''' + shot('sim_compare.png', [('slots', 1, 'tc'), ('head', 2, 'bl', True), ('slotctl', 3, 'bc'), ('slotgo', 4, 'bc'), ('startall', 5, 'bl'),
+                                  ('go', 6, 'tc'), ('compare', 7, 'tl', True), ('editing', 8, 'br')]) + legend([
+    ('동시 실행 개수', '1~4. 슬롯 A–D 는 색으로 구분됩니다. 슬롯 하나가 CPU 약 1코어를 씁니다'),
+    ('슬롯 머리글', '설정 이름을 누르면 설정 세트·스택 기본값을 고르는 메뉴. 옆은 상태(꺼짐 / 시작 중 / 실행 중 / 변경됨 / 오류)'),
+    ('슬롯 시작 · 끄기', '그 슬롯만 시작·재시작(설정을 바꿨으면 변경 적용)·끄기'),
+    ('슬롯 주행', '깃발: 그 슬롯만 출발점에서 다시 주행 · 네모: 그 슬롯 주행 멈춤'),
+    ('모두 시작', '꺼져 있거나 설정이 바뀐 슬롯을 2초 간격으로 띄웁니다. 모두 실행 중이면 모두 재시작'),
+    ('동시 출발', '로봇을 모두 출발점에, 보행자를 처음 자리에 되돌린 뒤 같은 순간에 출발. 목표를 찍어도 같습니다'),
+    ('비교 패널', '슬롯별 상태, 속도·이격 그래프, 이번 주행 비교표. 모두 도착하면 항목마다 가장 좋은 값이 초록'),
+    ('편집 중인 슬롯', '화면을 누르거나 1~4 키로 고릅니다. 왼쪽 스택·파라미터 탭이 이 슬롯을 바꿉니다'),
+  ]) + '''
+  <div class="cols">
+    <div>
+      <h3>따라하기</h3>
+      <ol class="steps compact">
+        <li>맵과 시나리오를 고르고 아래 막대에서 <b>3</b> 을 누릅니다.</li>
+        <li>슬롯 머리글의 이름을 눌러 비교할 설정을 고릅니다. 예: A 운영 설정, B MPPI, C Regulated Pure Pursuit.</li>
+        <li>상단 <b>모두 시작</b>. 세 슬롯이 ‘실행 중’ 이 되면 목표를 찍거나 <b>동시 출발</b>.</li>
+        <li>다른 슬롯의 궤적이 흐린 색으로 겹쳐 보입니다. 끝나면 비교표를 보고 <b>이 설정들로 벤치마크</b> 로 여러 시나리오에서 확인합니다.</li>
+      </ol>
+      <p class="note">한 번의 주행에는 보행자 타이밍 같은 우연이 섞입니다. 차이가 작으면 벤치마크로 확인하세요.</p>
+    </div>
+    <div>''' + shot('slot_menu.png', [], '슬롯 머리글 메뉴: 설정 세트, 스택 기본값, 다른 슬롯 설정 복사, 파라미터 직접 편집.', 'shot small') + '''</div>
   </div>
 </section>''')
 
 # ---------------------------------------------------------------- 7. robot design
 PAGES.append('''
 <section class="page">
-  <header class="ph"><span>06</span>로봇 설계</header>
+  <header class="ph"><span>07</span>로봇 설계</header>
   ''' + shot('robot.png', [('form', 1, 'mr'), ('drive', 2, 'tr'), ('cadtools', 3, 'bl'), ('cad', 4, 'mc'), ('three', 5, 'ml'), ('derived', 6, 'ml')]) + legend([
     ('제원 입력', '이름, 차체 색·높이, 바퀴, 물리 한계(최대 속도·가속), 구동계 지연·슬립, 라이다 목록'),
     ('구동 방식', '차동 구동 · 전방향(메카넘) · 차량형(Ackermann). 차량형은 축거와 최대 조향각으로 최소 회전반경이 정해집니다'),
@@ -234,10 +273,10 @@ PAGES.append('''
 # ---------------------------------------------------------------- 8. benchmark
 PAGES.append('''
 <section class="page">
-  <header class="ph"><span>07</span>벤치마크</header>
+  <header class="ph"><span>08</span>벤치마크</header>
   <p>설정 여러 개를 같은 시나리오로 반복 주행해 어느 쪽이 나은지 숫자로 비교합니다. 파라미터를 바꾼 효과가 우연인지 확인할 때 씁니다.</p>
   <ol class="steps compact">
-    <li><b>새 벤치마크</b> → 비교할 설정을 추가합니다 (현재 시뮬레이션 설정, 튜닝 프리셋, 스택 기본값). 첫 번째가 비교 기준입니다.</li>
+    <li><b>새 벤치마크</b> → 비교할 설정을 추가합니다 (현재 설정, <b>설정 세트·스택</b>, 동시 실행 중인 슬롯 전체). 첫 번째가 비교 기준입니다.</li>
     <li>맵, 시나리오 종류, 맵당 에피소드 수, 동시 실행 수를 정합니다. 화면 아래에 예상 시간이 나옵니다.</li>
     <li><b>벤치마크 시작</b>. 창을 닫아도 서버에서 계속 돌고, 왼쪽 목록에서 다시 열 수 있습니다.</li>
   </ol>
@@ -262,7 +301,7 @@ PAGES.append('''
 # ---------------------------------------------------------------- 9. tuning
 PAGES.append('''
 <section class="page">
-  <header class="ph"><span>08</span>자동 튜닝</header>
+  <header class="ph"><span>09</span>자동 튜닝</header>
   <p>고른 파라미터들의 범위 안에서 Optuna(TPE)가 조합을 바꿔 가며 시나리오를 주행하고, 점수가 높은 조합을 찾습니다.</p>
   <div class="cols">
     <div>
@@ -278,25 +317,65 @@ PAGES.append('''
     <div>''' + shot('tune_form.png', [], '새 튜닝 화면: 파라미터 체크와 범위, 점수 가중치, 시나리오, trial 수.', 'shot small') + '''</div>
   </div>
   ''' + shot('tune_result.png', [], '튜닝 결과: 최고 trial 의 점수와 지표를 기준과 비교하고, 파라미터 값과 점수 추이를 보여 줍니다.') + '''
-  <p class="warn"><b>적용 전에 검증하세요.</b> 튜닝 점수는 튜닝에 쓴 시나리오에서만 잰 값이라 우연히 좋게 나올 수 있습니다. <b>검증 벤치마크</b> 를 누르면 기준과 최고 설정을 튜닝에 쓰지 않은 맵에서 비교합니다. 결과가 좋으면 <b>시뮬레이션에 적용</b> 으로 값을 옮기고 YAML 로 내보냅니다.</p>
+  <p class="warn"><b>적용 전에 검증하세요.</b> 튜닝 점수는 튜닝에 쓴 시나리오에서만 잰 값이라 우연히 좋게 나올 수 있습니다. <b>검증 벤치마크</b> 를 누르면 기준과 최고 설정을 튜닝에 쓰지 않은 맵에서 비교합니다. 결과가 좋으면 <b>시뮬레이션에 적용</b> 으로 값을 옮기거나 <b>설정 세트로 저장</b> 해 동시 실행·벤치마크에서 씁니다.</p>
 </section>''')
 
-# ---------------------------------------------------------------- 10. data / troubleshooting
+# ---------------------------------------------------------------- 11. maps
 PAGES.append('''
 <section class="page">
-  <header class="ph"><span>09</span>데이터와 문제 해결</header>
+  <header class="ph"><span>10</span>맵 추가와 관리</header>
+  <p>기본 맵 4종 외에 ROS map_server 형식의 맵을 추가해 씁니다. 현장 맵처럼 저장소에 넣지 않는 맵도 각자 PC 에 추가하면 됩니다.</p>
+  <div class="cols">
+    <div>''' + shot('map_add.png', [], '맵 추가 창: 파일을 끌어다 놓거나 눌러서 고릅니다. 맵이 하나면 표시 이름을 정할 수 있습니다.', 'shot small') + '''</div>
+    <div>
+      <h3>추가하기</h3>
+      <ol class="steps compact">
+        <li>맵 탭의 <b>맵 추가</b>. 또는 파일을 맵 탭에 바로 끌어다 놓습니다.</li>
+        <li>둘 중 하나를 고릅니다: <b>YAML + 이미지</b> (resolution · origin · image 가 있는 YAML 과 PGM/PNG), 또는 <b>맵 zip</b> (맵 여러 개 가능).</li>
+        <li><b>추가</b> — ‘내 맵’ 에 나타나고 바로 선택됩니다. 같은 이름이 있으면 뒤에 (2) 가 붙습니다.</li>
+      </ol>
+      <h3>맵 zip 형식</h3>
+      ''' + code('''
+site_a/map.yaml        # resolution, origin, image
+site_a/map.pgm
+site_a/info.json       # 선택: {"name": "...", "group": "현장"}
+site_a/scenarios.json  # 선택: 준비된 시나리오
+site_b/...''') + '''
+    </div>
+  </div>
+  <div class="cols">
+    <div>''' + shot('map_menu.png', [], '맵 카드의 ⋯ 메뉴: 내보내기(zip), 이름 바꾸기, 지우기. 기본 맵은 내보내기만 됩니다.', 'shot small') + '''</div>
+    <div>
+      <h3>내보내기 · 이름 바꾸기 · 지우기</h3>
+      <p>맵 카드에 마우스를 올리면 ⋯ 버튼이 나타납니다. <b>내보내기</b> 는 위 형식의 zip 을 받아 다른 PC 의 Nav Studio 에서 그대로 추가할 수 있게 합니다. 지운 맵은 되돌릴 수 없습니다.</p>
+      <h3>명령줄</h3>
+      ''' + code('''
+navstudio maps list
+navstudio maps import site_maps.zip
+navstudio maps import office.yaml office.pgm --name "3층 사무실"
+navstudio maps export site_a -o site_a.zip
+navstudio maps remove site_a''') + '''
+    </div>
+  </div>
   <h3>저장 위치</h3>
   <table class="tbl">
-    <tr><th>직접 설치</th><td><code>~/.navstudio/</code> — robots(내 로봇), maps(올린 맵), runs(벤치마크·튜닝 기록), sessions(마지막 세션 설정), overlay(빌드한 플러그인). <code>NAVSTUDIO_HOME</code> 으로 위치 변경</td></tr>
-    <tr><th>Docker</th><td><code>navstudio-data</code> 볼륨의 <code>/data</code></td></tr>
-    <tr><th>맵 올리기</th><td>맵 탭의 <b>맵 올리기</b> 에서 ROS map_server 형식의 YAML(resolution, origin) 과 PGM/PNG 이미지를 고릅니다</td></tr>
+    <tr><th>직접 설치</th><td><code>~/.navstudio/</code> — maps(추가한 맵), presets(설정 세트), robots(내 로봇), runs(벤치마크·튜닝 기록), sessions(슬롯별 마지막 세션), overlay(빌드한 플러그인). <code>NAVSTUDIO_HOME</code> 으로 위치 변경</td></tr>
+    <tr><th>Docker</th><td><code>navstudio-data</code> 볼륨의 <code>/data</code> (위와 같은 폴더 구성)</td></tr>
   </table>
+</section>''')
+
+# ---------------------------------------------------------------- 12. troubleshooting
+PAGES.append('''
+<section class="page">
+  <header class="ph"><span>11</span>문제 해결</header>
   <h3>자주 묻는 것</h3>
   <table class="tbl faq">
     <tr><th>시작을 눌렀는데 “오류” 가 뜬다</th><td>오류 상자의 <b>로그 보기</b> 나 오른쪽 아래 <b>실행 로그</b> 에서 첫 ERROR 줄을 확인합니다. 고급 오버라이드에 잘못된 값을 넣었을 때 흔합니다. <b>모두 초기화</b> 후 다시 시작해 보세요.</td></tr>
     <tr><th>“플러그인 없음 → 표준 플래너로 대체” 경고</th><td>Everybot 플래너가 빌드되지 않은 상태입니다. <code>navstudio build-plugins</code> 를 실행하세요. Docker 이미지는 이미 포함되어 있습니다.</td></tr>
     <tr><th>“출발점에서 로봇이 벽과 겹칩니다”</th><td>큰 로봇일 때 나옵니다. 출발점 도구로 넓은 곳을 고르세요. 겹친 채로는 경로를 만들지 못합니다.</td></tr>
     <tr><th>로봇이 제자리에서 멈춰 복구만 반복한다</th><td>좁은 틈 근처에서 장애물 비용이 높은 영역에 들어간 경우입니다. 경로 계획의 통과 비용 가중치를 높이거나 inflation 을 조정해 보세요. 실제 로봇에는 이 상황을 푸는 별도 탈출 동작이 있을 수 있습니다.</td></tr>
+    <tr><th>동시 실행에서 한 슬롯만 “오류”</th><td>그 화면의 <b>로그 보기</b> 에서 첫 ERROR 줄을 확인하고 <b>다시 시작</b> 합니다. 다른 슬롯은 영향을 받지 않습니다. 기동이 30초 안에 끝나지 않으면 한 번은 자동으로 다시 띄웁니다.</td></tr>
+    <tr><th>슬롯을 여러 개 띄우니 움직임이 이상하다</th><td>슬롯 하나가 CPU 약 1코어를 씁니다. 코어가 부족하면 Nav2 제어 주기가 밀려 결과가 달라집니다. 개수를 줄이거나 벤치마크를 같이 돌리지 마세요.</td></tr>
     <tr><th>벤치마크가 느리다</th><td>Nav2 는 실시간으로만 돌아서 에피소드당 20~60초가 걸립니다. 동시 실행 수를 CPU 코어 수의 절반 정도까지 올리세요.</td></tr>
     <tr><th>포트 8765 를 이미 쓴다</th><td><code>navstudio --port 8780</code>, Docker 는 compose.yml 의 <code>ports</code> 를 <code>"127.0.0.1:8780:8765"</code> 로 바꾸고 <code>http://localhost:8780</code> 으로 엽니다.</td></tr>
   </table>
@@ -402,8 +481,13 @@ def build():
         for i, el in enumerate(pg.query_selector_all('.page'), 1):
             el.screenshot(path=os.path.join(pages_dir, f'page_{i:02d}.png'))
         br.close()
+    sys.path.insert(0, os.path.join(ROOT, 'scripts'))
+    from check import guide_inputs_hash
+    json.dump(dict(version=VERSION, date=DATE, pages=len(PAGES), overflow=overflow, inputs=guide_inputs_hash()),
+              open(os.path.join(HERE, 'guide.stamp.json'), 'w'), indent=1)
     print('pdf:', pdf, '| pages:', len(PAGES), '| overflowing pages:', overflow or 'none')
+    return 1 if overflow else 0
 
 
 if __name__ == '__main__':
-    build()
+    sys.exit(build())

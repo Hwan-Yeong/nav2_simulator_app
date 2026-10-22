@@ -1,0 +1,4 @@
+#!/bin/sh
+# Enabled with: git config core.hooksPath scripts/hooks   (see docs/DEVELOPMENT.md)
+# Blocks a commit when versions disagree, a banned name slipped in, YAML has duplicate keys or code does not parse.
+exec python3 scripts/check.py --quick

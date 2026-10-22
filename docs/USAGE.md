@@ -37,8 +37,8 @@ docker compose -f docker/compose.yml up -d --build   # 처음 빌드 10분 안�
 ### 실행 환경 격리
 
 Nav Studio 는 사용자 셸의 ROS 오버레이와 DDS 프로파일을 쓰지 않습니다. `/opt/ros/humble` 과 자체 플러그인 오버레이만 소싱하고,
-`ROS_LOCALHOST_ONLY=1` 과 전용 `ROS_DOMAIN_ID`(실시간 세션 91, 벤치마크 150~, 튜닝 170~)를 씁니다. 같은 네트워크의 실제 로봇과 섞이지 않습니다.
-도메인은 `navstudio --domain N` 으로 바꿀 수 있습니다.
+`ROS_LOCALHOST_ONLY=1` 과 전용 `ROS_DOMAIN_ID`(실시간 슬롯 91~94, 벤치마크 150~, 튜닝 170~)를 씁니다. 같은 네트워크의 실제 로봇과 섞이지 않습니다.
+실시간 슬롯의 시작 도메인은 `navstudio --domain N` 으로 바꿀 수 있습니다 (N~N+3 을 씁니다. 0~146 또는 200~229).
 
 ## 사용법
 
@@ -48,7 +48,35 @@ Nav Studio 는 사용자 셸의 ROS 오버레이와 DDS 프로파일을 쓰지 �
 4. **파라미터** 탭에서 값을 바꾸면 상단 버튼이 **변경 적용 (재시작)** 으로 바뀝니다. 누르면 같은 장면으로 Nav2 를 다시 띄웁니다.
 5. 같은 설정을 여러 시나리오로 비교하려면 **벤치마크**, 좋은 값을 찾으려면 **자동 튜닝** 을 씁니다.
 
-단축키: `V` 선택 · `H` 이동 · `S` 출발점 · `G` 목표 · `B` 박스 · `P` 기둥 · `C` 의자 · `W` 보행자 · `E` 지우개 · `Delete` 선택 삭제 · `Esc` 취소 · 휠 확대.
+### 동시 실행 비교
+
+서로 다른 설정의 거동을 한 화면에서 비교합니다. 맵·로봇·장면(출발점, 목표, 장애물, 보행자)은 모든 슬롯이 같이 씁니다.
+
+1. 화면 아래 막대의 **1 · 2 · 3 · 4** 로 동시에 띄울 개수를 고릅니다. 슬롯 A–D 가 색으로 구분됩니다.
+2. 각 화면 머리글의 설정 이름을 눌러 **설정 세트** 나 **스택 기본값** 을 고릅니다. 화면을 누르거나 `1`~`4` 키로 슬롯을 고르면 왼쪽 패널(스택·파라미터)이 그 슬롯을 편집합니다.
+3. 상단 **모두 시작** — 꺼져 있거나 설정이 바뀐 슬롯을 2초 간격으로 띄웁니다. 슬롯 하나만 시작·재시작·끄기는 머리글 버튼으로 합니다.
+4. 목표를 찍거나 **동시 출발** 을 누르면 모든 로봇이 출발점으로 돌아가고, 보행자도 처음 자리에서 다시 움직이고, 같은 순간에 출발합니다. 머리글의 깃발 버튼은 그 슬롯만 다시 주행합니다.
+5. 오른쪽 **이번 주행 비교** 표에서 시간·거리·속도·이격·복구를 비교합니다. 모두 도착하면 항목마다 가장 좋은 값이 굵게 표시됩니다. 한 번의 주행에는 우연이 섞이므로 **이 설정들로 벤치마크** 로 넘겨 여러 시나리오에서 확인하세요.
+
+슬롯 하나가 CPU 약 1코어를 씁니다. 코어 수의 절반보다 많이 띄우면 Nav2 제어 주기가 밀려 결과가 달라질 수 있습니다.
+
+### 설정 세트
+
+**설정 세트** 는 주행 스택(제어기 + 경로 계획기)과 바꾼 파라미터를 묶어 이름 붙인 것입니다.
+
+- 저장: 파라미터 탭 위 **저장**, 또는 로봇·스택 탭의 **현재 설정 저장**. 같은 이름이 있으면 덮어쓸지 묻습니다. 자동 튜닝 결과에서도 **설정 세트로 저장** 할 수 있습니다.
+- 사용: 로봇·스택 탭의 설정 세트 목록, 동시 실행 슬롯의 머리글, 벤치마크의 **설정 세트·스택** 추가 버튼.
+- 지우기: 목록의 휴지통 버튼. 기본 세트(튜닝안 A·B)는 지울 수 없습니다.
+- 저장 위치: `~/.navstudio/presets/<id>.yaml` (다른 PC 로 복사해도 됩니다).
+
+### 맵 추가와 관리
+
+- **추가**: 맵 탭의 **맵 추가**, 또는 맵 파일을 맵 탭에 끌어다 놓습니다. ROS map_server 형식의 YAML(resolution, origin, image) + 이미지(PGM·PNG), 또는 맵 zip 을 받습니다. zip 하나에 맵 여러 개가 들어 있어도 됩니다.
+- **맵 zip 형식**: 맵마다 폴더 하나 — `<id>/map.yaml`, 이미지, 선택으로 `info.json`(`name`, `group`, `description`)과 `scenarios.json`(준비된 시나리오). 맵 카드 ⋯ 메뉴의 **내보내기** 가 이 형식으로 저장하므로, 한 PC 에서 내보낸 맵을 다른 PC 에서 그대로 가져올 수 있습니다.
+- **이름 바꾸기·지우기**: 맵 카드 ⋯ 메뉴. 기본 맵은 바꾸거나 지울 수 없습니다.
+- **명령줄**: `navstudio maps list`, `navstudio maps import <zip | YAML 이미지 | 폴더>... [--name 이름]`, `navstudio maps export <id> [-o 파일]`, `navstudio maps rename <id> <이름>`, `navstudio maps remove <id>`.
+
+단축키: `V` 선택 · `H` 이동 · `S` 출발점 · `G` 목표 · `B` 박스 · `P` 기둥 · `C` 의자 · `W` 보행자 · `E` 지우개 · `Delete` 선택 삭제 · `Esc` 취소 · 휠 확대 · `1`~`4` 슬롯 선택.
 URL 끝에 `#sim`, `#robot`, `#bench`, `#tune` 을 붙이면 해당 작업 공간이 열립니다.
 
 ## 측정 방법
@@ -63,21 +91,23 @@ URL 끝에 `#sim`, `#robot`, `#bench`, `#tune` 을 붙이면 해당 작업 공�
 
 ```
 navstudio/
-  cli.py            navstudio [run|doctor|build-plugins]
+  cli.py            navstudio [run|doctor|build-plugins|maps]
   env.py            ROS 환경 격리
-  server.py         FastAPI REST + WebSocket(상태 20Hz, costmap 압축 전송)
-  bridge.py         rclpy 브리지 (상태·경로·costmap·로그 수신, 목표·월드 명령)
+  server.py         FastAPI REST + WebSocket(상태 20Hz, costmap 압축 전송), 실시간 슬롯 4개
+  bridge.py         rclpy 브리지, 슬롯마다 하나 (자기 Context·도메인. 상태·경로·costmap·로그 수신, 목표·월드 명령)
+  configsets.py     설정 세트 (스택 + 파라미터 변경) 저장소
+  maps.py           맵 목록·메타·가져오기·내보내기
   stack.py          세션 프로세스 관리 (서버가 죽으면 함께 종료, 남은 세션 정리)
   paramgen.py       운영 YAML → 스택 프리셋 → 로봇 → 사용자 변경 순서로 Nav2 params 생성
   schema.py         UI 파라미터 스키마 (data/param_schema.yaml)
   robot.py          로봇 프로파일 검증·변환
   sim/sim2d.py      2D 시뮬레이터 (차동/전방향/차량형, 다각형 footprint, 다중 라이다, 보행자)
   bench/            시나리오 생성, 벤치마크 워커, 실행 관리, 통계, Optuna 튜닝
-  data/             맵, 시나리오, 운영 params·BT, 스택·로봇·튜닝 프리셋, 플러그인 소스
+  data/             기본 맵 4종과 시나리오, 운영 params·BT, 스택·로봇 프리셋, 기본 설정 세트, 플러그인 소스
   web/              UI (빌드 도구 없는 ES 모듈 + Canvas, three.js)
 ```
 
-사용자 데이터는 `~/.navstudio` (`NAVSTUDIO_HOME` 로 변경)에 저장됩니다: `robots/`, `maps/`, `runs/`, `sessions/`, `overlay/`.
+사용자 데이터는 `~/.navstudio` (`NAVSTUDIO_HOME` 로 변경)에 저장됩니다: `robots/`, `maps/`, `presets/`(설정 세트), `runs/`, `sessions/`(슬롯별), `overlay/`.
 
 ### 확장
 
@@ -95,8 +125,4 @@ navstudio/
 
 ## 개발
 
-```bash
-PYTHONPATH=$PWD python3 -m navstudio run --no-browser     # 소스에서 실행
-python3 tests/e2e_flow.py                                 # Playwright: 맵 선택→시작→목표→파라미터 변경→재시작
-python3 tests/ui_probe.py --url "http://localhost:8765/?debug#bench" --out /tmp/shot.png
-```
+개발 환경, 테스트, 변경할 때 같이 고칠 문서는 [DEVELOPMENT.md](DEVELOPMENT.md), 배포 절차는 [RELEASE.md](RELEASE.md) 를 보세요.

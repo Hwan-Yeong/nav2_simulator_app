@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "navstudio"
-version = "0.1.0"
+dynamic = ["version"]   # navstudio/__init__.py __version__ is the single source
 description = "Nav Studio: 2D Nav2 simulation, benchmarking and parameter tuning in the browser (Everybot)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,10 +27,14 @@ Repository = "https://github.com/Hwan-Yeong/nav2_simulator_app"
 
 [project.optional-dependencies]
 tune = ["optuna>=3.4"]
-dev = ["playwright>=1.40"]
+test = ["pytest>=7", "httpx>=0.24"]
+dev = ["pytest>=7", "httpx>=0.24", "playwright>=1.40"]
 
 [project.scripts]
 navstudio = "navstudio.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "navstudio.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["navstudio*"]
@@ -43,3 +47,6 @@ navstudio = [
   "data/maps/*", "data/maps/*/*",
   "data/plugins_src/*/*", "data/plugins_src/*/*/*", "data/plugins_src/*/*/*/*", "data/plugins_src/*/*/*/*/*",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/unit"]

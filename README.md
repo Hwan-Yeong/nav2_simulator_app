@@ -1,7 +1,7 @@
 # Nav Studio
 
-**ROS 2 Nav2 주행을 브라우저에서 시뮬레이션하고, 벤치마크로 비교하고, 자동 튜닝하는 2D 시뮬레이터.**
-*A browser-based 2D simulator that drives the real ROS 2 Nav2 stack: design a robot, drop obstacles, benchmark configurations with statistics, and auto-tune parameters.*
+**ROS 2 Nav2 주행을 브라우저에서 시뮬레이션하고, 설정 여러 개를 나란히 띄워 비교하고, 벤치마크와 자동 튜닝까지 하는 2D 시뮬레이터.**
+*A browser-based 2D simulator that drives the real ROS 2 Nav2 stack: run up to four configurations side by side, design a robot, drop obstacles, benchmark with statistics and auto-tune parameters.*
 
 ![ROS 2 Humble](https://img.shields.io/badge/ROS_2-Humble-22314E?logo=ros)
 ![Nav2](https://img.shields.io/badge/Nav2-1.1-2b6cb0)
@@ -9,10 +9,12 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-WebSocket-009688?logo=fastapi&logoColor=white)
 ![Optuna](https://img.shields.io/badge/Optuna-TPE-6c4ab6)
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
+[![CI](https://github.com/Hwan-Yeong/nav2_simulator_app/actions/workflows/ci.yml/badge.svg)](https://github.com/Hwan-Yeong/nav2_simulator_app/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/tag/Hwan-Yeong/nav2_simulator_app?label=release&sort=semver)](CHANGELOG.md)
 
-![Nav Studio 데모: 카페테리아 맵에서 보행자 2명을 피해 목표까지 주행 (2배속)](docs/media/demo.gif)
+![Nav Studio 데모: 설정 세 가지(운영 설정 · MPPI · Pure Pursuit)를 같은 장면에서 동시에 출발시켜 비교 (2배속)](docs/media/demo.gif)
 
-<sub>실제 현장 맵(카페테리아, 24.7 × 23.9 m)에서 Nav2 Humble 스택이 보행자를 피해 목표까지 주행하는 장면, 2배속. 왼쪽은 맵 목록, 가운데는 전역·지역 costmap과 경로·라이다·궤적, 오른쪽은 실시간 속도·이격거리 텔레메트리.</sub>
+<sub>동시 실행 비교: 같은 맵·같은 보행자에서 설정 세 가지(A 운영 설정 · B MPPI · C Regulated Pure Pursuit)가 같은 순간에 출발합니다. 화면마다 실제 Nav2 스택이 따로 돌고, 다른 슬롯의 궤적이 겹쳐 보이며, 오른쪽 표가 도착 시간·속도·장애물 이격을 비교합니다. 2배속.</sub>
 
 ---
 
@@ -22,23 +24,26 @@
 |---|---|
 | **무엇** | 맵·로봇·파라미터를 고르면 **실제 Nav2 스택**(planner · controller · BT navigator · costmap · velocity smoother)이 2D 시뮬레이터 위의 로봇을 실시간으로 움직이는 데스크톱급 웹 앱 |
 | **왜** | 실제 로봇 없이 Nav2 설정을 바꿔 보고, 그 효과를 "느낌"이 아니라 **통계로** 판단할 환경이 없었다 |
-| **규모** | Python 약 3.4k줄(서버·시뮬레이터·벤치마크) + JavaScript 약 2.5k줄(UI) · 기본 맵 4종 · 로봇 프리셋 4종 · Nav2 스택 프리셋 5종 |
+| **규모** | Python 약 3.9k줄(서버·시뮬레이터·벤치마크) + JavaScript 약 3.2k줄(UI) + 테스트 약 0.6k줄 · 기본 맵 4종 · 로봇 프리셋 4종 · Nav2 스택 프리셋 5종 |
 | **검증** | 이 시뮬레이터 하네스로 **6,700여 회, 약 90시간 분량의 주행**을 돌려 운영 Nav2 설정을 평가함 ([케이스 스터디](#케이스-스터디-운영-nav2-설정-검증)) |
-| **배포** | `pip install` + `navstudio` CLI, 또는 Docker 이미지 하나 · [10쪽 사용 가이드 PDF](docs/guide/Nav_Studio_User_Guide.pdf) |
+| **배포** | `pip install` + `navstudio` CLI, 또는 Docker 이미지 하나 · [사용 가이드 PDF](docs/guide/Nav_Studio_User_Guide.pdf) · 버전별 [변경 이력](CHANGELOG.md) |
 
 ## 주요 기능
 
 | 작업 공간 | 내용 |
 |---|---|
-| **시뮬레이션** | 맵 선택(기본 4종 + 직접 올린 맵), 출발·목표를 마우스로 지정, 실행 중에 박스·기둥·의자·보행자 배치, 전역/지역 costmap·경로·라이다·궤적 실시간 표시, Nav2 경고·오류 메시지 |
-| **파라미터** | 스택별 핵심 파라미터 슬라이더, 운영 기본값 대비 diff, YAML 오버라이드, 최종 `params.yaml` 내보내기. 변경 후 같은 장면으로 Nav2 재기동 |
+| **시뮬레이션** | 맵 선택(기본 4종 + 끌어다 놓아 추가한 맵), 출발·목표를 마우스로 지정, 실행 중에 박스·기둥·의자·보행자 배치, 전역/지역 costmap·경로·라이다·궤적 실시간 표시, Nav2 경고·오류 메시지 |
+| **동시 실행 비교** | 설정이 다른 시뮬레이션을 **최대 4개 나란히** 실행. 모두 시작 / 슬롯별 시작·정지, 모든 로봇을 같은 출발점·같은 순간에 보내는 ‘동시 출발’, 다른 슬롯 궤적 겹쳐 보기, 실시간 비교표, 그대로 벤치마크로 넘기기 |
+| **파라미터 · 설정 세트** | 스택별 핵심 파라미터 슬라이더, 운영 기본값 대비 diff, YAML 오버라이드, `params.yaml` 내보내기. 스택 + 바꾼 값을 **설정 세트** 로 저장해 슬롯·벤치마크·튜닝에서 이름으로 사용 |
 | **로봇 설계** | 구동 방식(차동 · 전방향 · 차량형), 원형·다각형 footprint를 상면도 CAD에서 드래그 편집, 라이다 위치·방향·시야각, 가감속·슬립, three.js 3D 미리보기. 여기서 정한 값으로 시뮬레이터와 Nav2 설정이 자동 생성됨 |
 | **벤치마크** | 최대 4개 설정을 같은 시나리오(정상 · 맵에 없는 장애물 · 보행자)로 병렬 반복 주행. 성공률 95% 신뢰구간, 짝비교 검정, 충돌·속도·이격·복구·저크·CPU 비교, 에피소드 재생 |
 | **자동 튜닝** | 고른 파라미터 범위를 Optuna(TPE)로 탐색, 실시간 순위표, 최고 설정을 바로 적용하거나 다른 맵에서 검증 |
 
-| 로봇 설계 (2D CAD + 3D) | 벤치마크 (통계 비교) | 자동 튜닝 (Optuna) |
-|---|---|---|
-| ![로봇 설계](docs/img/robot_designer.png) | ![벤치마크](docs/img/benchmark.png) | ![자동 튜닝](docs/img/tuning.png) |
+| 시뮬레이션 (단일) | 로봇 설계 (2D CAD + 3D) |
+|---|---|
+| ![시뮬레이션](docs/img/sim.png) | ![로봇 설계](docs/img/robot_designer.png) |
+| **벤치마크 (통계 비교)** | **자동 튜닝 (Optuna)** |
+| ![벤치마크](docs/img/benchmark.png) | ![자동 튜닝](docs/img/tuning.png) |
 
 ## 아키텍처
 
@@ -51,7 +56,7 @@ flowchart TB
     BR["rclpy bridge"] --> WS["WebSocket 20 Hz<br/>압축 costmap"]
     API --> RUN["bench · tune runner<br/>Optuna"]
   end
-  subgraph R["실시간 세션 · 격리된 ROS 2 Humble"]
+  subgraph R["실시간 슬롯 A–D · 슬롯마다 ROS 도메인 91–94"]
     direction LR
     SIM["sim2d<br/>차동 · 전방향 · 차량형"] -->|"/scan · /odom · TF · /clock"| NAV["Nav2<br/>planner · controller · BT · costmap"]
     NAV -->|"/cmd_vel"| SIM
@@ -67,7 +72,7 @@ flowchart TB
 
 - **sim2d**: 점유 격자 위의 2D 시뮬레이터. 차동·전방향·차량형 운동 모델, 원형·다각형 footprint 충돌(외곽 샘플 + 거리 변환), 다중 LaserScan, 로봇 앞에서 양보하는 보행자, 오도메트리 슬립. 위치는 정답 위치를 `map→odom` 으로 보정.
 - **paramgen**: `운영 params.yaml → 시뮬레이터 적응 → 스택 프리셋 → 로봇 제원 → 사용자 변경` 순서로 Nav2 파라미터를 합성. footprint가 바뀌면 inflation 반경·감쇠 계수를 자동으로 맞춤.
-- **bridge**: rclpy MultiThreadedExecutor 스레드에서 경로·costmap·로그·시뮬레이터 상태를 받아 WebSocket 으로 20 Hz 전송. costmap 은 zlib+base64 로 압축해 브라우저에서 `DecompressionStream` 으로 풉니다.
+- **bridge**: 슬롯마다 하나. 자기 rclpy Context(그 슬롯의 ROS 도메인)와 MultiThreadedExecutor 스레드에서 경로·costmap·로그·시뮬레이터 상태를 받아 WebSocket 으로 20 Hz 전송. costmap 은 zlib+base64 로 압축해 브라우저에서 `DecompressionStream` 으로 풉니다.
 
 ## 기술적으로 풀어낸 문제
 
@@ -86,8 +91,11 @@ Nav2 Humble 의 controller · behavior 루프는 `/clock` 을 따르지 않고 w
 **5. "좋아 보인다" 가 아니라 "유의하다" → 통계가 들어간 벤치마크**
 같은 설정을 반복 측정해 잡음 폭(성공률 ±1%p)을 먼저 정량화했다. 성공률은 Wilson 95% 신뢰구간, 설정 간 차이는 같은 에피소드 짝비교(McNemar 정확 검정)로 판정한다. 로봇이 물리적으로 지나갈 수 없는 에피소드(가장 좁은 틈 < 2 × (내접 반경 + 여유) + 12 cm)는 자동으로 분리해 성공률을 왜곡하지 않게 했다. 튜닝 점수는 튜닝에 쓴 맵에서만 잰 값이므로, UI 가 다른 맵으로 검증하는 흐름을 기본으로 안내한다.
 
-**6. 배포 가능한 제품으로 → 패키지 · CLI · Docker · 자동 테스트**
-`pip install` 한 번으로 `navstudio` 명령이 생기고, `navstudio doctor` 가 ROS 2 · Nav2 · 플러그인 · Python 패키지를 점검한다. ROS 2 Humble 의 ABI 와 맞추려고 `numpy<2` 를 고정했고, 시뮬레이터·워커는 서버와 같은 인터프리터로 띄운다. ROS 가 없는 PC 를 위해 Docker 이미지(Nav2 + 플러그인 빌드 포함)를 제공한다. UI 는 Playwright 로 "맵 선택 → 시작 → 목표 지정 → 파라미터 변경 → 재시작" 을 끝까지 자동 검증하고, 사용 가이드의 스크린샷과 이 README 의 데모도 같은 방식으로 실제 앱에서 생성한다.
+**6. Nav2 여러 개를 한 화면에서 → 슬롯마다 도메인 · 프로세스 그룹 · rclpy Context**
+설정 비교는 숫자 표보다 나란히 달리는 모습이 직관적이다. 서버 하나가 Nav2 스택 4개를 동시에 다루도록, 슬롯마다 ROS 도메인을 나누고(91~94), 프로세스 그룹을 따로 두고, rclpy Context 를 슬롯 수만큼 만들어 한 프로세스 안에서 도메인이 다른 노드들과 통신한다. 4개를 한꺼번에 띄우면 DDS 서비스 응답이 유실돼 bt_navigator 가 반쯤 활성화된 채 목표를 거부하는 경쟁 상태가 재현됐다. 그래서 기동을 2초 간격으로 두고, lifecycle manager 의 `is_active` 가 참일 때만 ‘실행 중’ 으로 올리고, 멈춘 기동은 한 번 자동 재시작한다. ‘동시 출발’ 은 모든 슬롯의 로봇·보행자를 초기 상태로 되돌린 뒤 같은 순간에 목표를 보내, 슬롯마다 시작 시각이 달라도 같은 조건에서 비교된다.
+
+**7. 배포 가능한 제품으로 → 패키지 · CLI · Docker · 자동 테스트 · 릴리스 체계**
+`pip install` 한 번으로 `navstudio` 명령이 생기고, `navstudio doctor` 가 ROS 2 · Nav2 · 플러그인 · Python 패키지를 점검한다. ROS 2 Humble 의 ABI 와 맞추려고 `numpy<2` 를 고정했고, 시뮬레이터·워커는 서버와 같은 인터프리터로 띄운다. ROS 가 없는 PC 를 위해 Docker 이미지(Nav2 + 플러그인 빌드 포함)를 제공한다. ROS 없이 도는 단위 테스트(설정 세트 · 맵 가져오기 · 파라미터 합성 · 통계 · REST)와, 실제 Nav2 를 띄워 브라우저를 조작하는 Playwright 흐름 테스트 3종(단일 주행, 동시 비교, 설정·맵 관리)이 있고, 사용 가이드의 스크린샷과 이 README 의 데모도 같은 방식으로 실제 앱에서 생성한다. 버전은 `navstudio/__init__.py` 한 곳에서 관리하고, `scripts/check.py` 가 pre-commit 훅과 CI 에서 버전 불일치·금지 이름·YAML 중복 키·깨진 링크·오래된 가이드 PDF 를 막는다 ([릴리스 절차](docs/RELEASE.md)).
 
 ## 케이스 스터디: 운영 Nav2 설정 검증
 
@@ -127,8 +135,10 @@ python3 -m venv ~/.navstudio-venv
 
 | 문서 | 내용 |
 |---|---|
-| [사용 가이드 PDF (10쪽)](docs/guide/Nav_Studio_User_Guide.pdf) | 설치, 화면 구성, 시뮬레이션·로봇 설계·벤치마크·튜닝 사용법, 자주 묻는 것 |
-| [docs/USAGE.md](docs/USAGE.md) | 설치 옵션, 다른 PC 에서 접속, 단축키, 측정 방법, 확장 방법, 개발 |
+| [사용 가이드 PDF](docs/guide/Nav_Studio_User_Guide.pdf) | 설치, 화면 구성, 시뮬레이션 · 동시 비교 · 설정 세트 · 로봇 설계 · 벤치마크 · 튜닝 · 맵 관리, 자주 묻는 것 |
+| [docs/USAGE.md](docs/USAGE.md) | 설치 옵션, 다른 PC 에서 접속, 동시 실행·설정 세트·맵 관리, 단축키, 측정 방법, 확장 |
+| [CHANGELOG.md](CHANGELOG.md) | 버전별 변경 이력 |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) · [docs/RELEASE.md](docs/RELEASE.md) | 개발 환경·테스트·같이 고칠 문서, 릴리스 절차 |
 | [docs/DESIGN.md](docs/DESIGN.md) | 설계 결정과 이유 |
 
 <a href="docs/guide/Nav_Studio_User_Guide.pdf"><img src="docs/guide/pages/page_01.png" width="24%"></a>
@@ -140,8 +150,9 @@ python3 -m venv ~/.navstudio-venv
 
 ```
 navstudio/
-  cli.py, env.py           navstudio [run|doctor|build-plugins], ROS 환경 격리
-  server.py, bridge.py     FastAPI REST + WebSocket, rclpy 브리지
+  cli.py, env.py           navstudio [run|doctor|build-plugins|maps], ROS 환경 격리
+  server.py, bridge.py     FastAPI REST + WebSocket, 실시간 슬롯 4개, 슬롯별 rclpy 브리지
+  configsets.py, maps.py   설정 세트 저장소, 맵 가져오기·내보내기
   stack.py                 세션 프로세스 관리 (프로세스 그룹, 고아 정리)
   paramgen.py, robot.py    Nav2 파라미터 합성, 로봇 프로파일
   sim/sim2d.py             2D 시뮬레이터
@@ -150,8 +161,10 @@ navstudio/
   data/                    기본 맵 4종, 시나리오, 기본 Nav2 params·BT, 스택·로봇·튜닝 프리셋, 플러그인 소스
   web/                     UI (ES 모듈 + Canvas, three.js)
 docker/                    Dockerfile, compose.yml
-docs/                      사용 가이드 PDF, 스크린샷, 데모, 사용법·설계 문서
-tests/                     Playwright E2E, 가이드·데모 캡처 스크립트
+docs/                      사용 가이드 PDF, 스크린샷, 데모, 사용법·개발·릴리스·설계 문서
+scripts/                   check.py(검사) · release.py(버전) · 가이드·데모 캡처 · git 훅
+tests/                     unit/(ROS 없이, pytest) · e2e/(Playwright 흐름)
+.github/workflows/         CI: 검사 + 단위 테스트, 릴리스 태그에서 Docker 빌드
 ```
 
 ## 기술 스택
@@ -163,7 +176,7 @@ tests/                     Playwright E2E, 가이드·데모 캡처 스크립트
 | 백엔드 | FastAPI, uvicorn, WebSocket, psutil |
 | 프런트엔드 | 빌드 도구 없는 ES 모듈, Canvas 2D, three.js |
 | 실험 · 통계 | Optuna (TPE, SQLite 공유 저장소로 다중 프로세스), Wilson 신뢰구간, McNemar 검정 |
-| 배포 · 테스트 | pyproject 패키지 + CLI, Docker / Compose, Playwright |
+| 배포 · 테스트 | pyproject 패키지 + CLI, Docker / Compose, pytest, Playwright, GitHub Actions, Semantic Versioning + CHANGELOG |
 
 ## 한계
 

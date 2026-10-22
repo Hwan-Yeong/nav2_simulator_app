@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Record a demo GIF of one live run, start to goal (server on :8765): docs/media/demo.gif
+"""Record the README demo (docs/media/demo.gif): three settings leave together in comparison mode, start to finish.
 
-python3 tests/capture_demo_gif.py [episode_id] [speedup]
+python3 scripts/capture_demo.py [episode_id] [speedup]     (server on :8765)
 """
 import io
 import json
@@ -16,7 +16,8 @@ from playwright.sync_api import sync_playwright
 B = 'http://localhost:8765'
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'docs', 'media')
 os.makedirs(OUT, exist_ok=True)
-FPS, WIDTH, MAX_S = 2.0, 960, 90
+FPS, WIDTH, MAX_S = 2.0, 960, 120
+SLOTS = ('운영 설정', 'MPPI', 'Regulated Pure Pursuit')
 
 
 def api(method, path, body=None):
@@ -25,38 +26,53 @@ def api(method, path, body=None):
     return json.load(urllib.request.urlopen(r))
 
 
-def main(eid='synth_clutter/dynamic/000', speedup=2.0):
+def state(pg):
+    return json.loads(pg.evaluate("document.getElementById('nsdebug').textContent || '{}'"))
+
+
+def main(eid='synth_clutter/dynamic/001', speedup=2.0):
     mid = eid.split('/')[0]
     ep = next(e for e in api('GET', f'/api/scenarios/{mid}') if e['id'] == eid)
-    api('POST', '/api/session/start', {'map': mid, 'robot_id': 'everybot', 'stack': 'prod', 'values': {}, 'start': ep['start']})
-    for _ in range(60):
-        if api('GET', '/api/info')['stack']['status'] == 'ready':
-            break
-        time.sleep(1)
-    api('POST', '/api/scene', {'map': mid, 'start': ep['start'], 'goal': ep['goal'],
-                               'static_obs': ep['static_obs'], 'dyn_obs': ep['dyn_obs']})
+    api('POST', '/api/session/stop', {})
+    sc = {'start': ep['start'], 'goal': ep['goal'], 'static_obs': ep['static_obs'], 'dyn_obs': ep['dyn_obs']}
     with sync_playwright() as p:
         br = p.chromium.launch()
         pg = br.new_page(viewport={'width': 1440, 'height': 860})
-        pg.goto(B + '/#sim')
-        pg.wait_for_timeout(3500)
+        pg.goto(B + '/?debug#sim')
+        pg.wait_for_timeout(1500)
+        pg.evaluate(f"localStorage.setItem('ns.scene.{mid}', JSON.stringify({json.dumps(sc)})); localStorage.setItem('ns.sel', JSON.stringify({{map: '{mid}', robotId: 'everybot'}}))")
+        pg.reload()
+        pg.wait_for_timeout(3000)
+        pg.click(f'.seg.slots button[data-n="{len(SLOTS)}"]')
+        for i, label in enumerate(SLOTS):
+            pg.click(f'#vhead{i} .cfgname')
+            pg.click(f'.menu button:has(b:text-is("{label}"))')
+            pg.wait_for_timeout(300)
+        pg.click('#btnStart')
+        t0 = time.time()
+        while not all(s['status'] == 'ready' for s in state(pg)['slots']):
+            if time.time() - t0 > 90:
+                raise SystemExit('slots not ready')
+            pg.wait_for_timeout(500)
+        pg.wait_for_timeout(1500)
         pg.mouse.move(1430, 850)
-        api('POST', '/api/nav/goal', {'pose': ep['goal']})
+        pg.click('#runbar button:has-text("동시 출발")')
         frames, t0, done_at = [], time.time(), None
-        while time.time() - t0 < MAX_S and (done_at is None or time.time() - done_at < 2.0):
+        while time.time() - t0 < MAX_S and (done_at is None or time.time() - done_at < 3.0):
             t = time.time()
             im = Image.open(io.BytesIO(pg.screenshot())).convert('RGB')
             frames.append(im.resize((WIDTH, int(im.height * WIDTH / im.width)), Image.LANCZOS))
-            label = pg.locator('.row1 .big').first.text_content() or ''
-            if done_at is None and time.time() - t0 > 3 and label not in ('주행 중', '목표 전송'):
+            if done_at is None and time.time() - t0 > 3 and all(s.get('result') for s in state(pg)['slots']):
                 done_at = time.time()
             time.sleep(max(0.0, 1.0 / FPS - (time.time() - t)))
+        results = [s.get('result') for s in state(pg)['slots']]
+        api('POST', '/api/session/stop', {})
         br.close()
     pal = frames[len(frames) // 2].quantize(colors=96, method=Image.MEDIANCUT)
     q = [f.quantize(palette=pal, dither=Image.NONE) for f in frames]
     path = os.path.join(OUT, 'demo.gif')
     q[0].save(path, save_all=True, append_images=q[1:], duration=int(1000 / FPS / speedup), loop=0, optimize=True)
-    print(path, len(frames), 'frames', round(time.time() - t0), 's', label, os.path.getsize(path) // 1024, 'KB')
+    print(path, len(frames), 'frames', round(time.time() - t0), 's', results, os.path.getsize(path) // 1024, 'KB')
 
 
 if __name__ == '__main__':

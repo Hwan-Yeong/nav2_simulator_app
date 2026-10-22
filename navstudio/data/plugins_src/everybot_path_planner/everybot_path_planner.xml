@@ -1,0 +1,5 @@
+<library path="everybot_path_planner">
+    <class name="everybot_path_planner/PathPlanner" type="everybot_path_planner::PathPlanner" base_class_type="nav2_core::GlobalPlanner">
+        <description>An implementation of the Everybot path planning Algorithm</description>
+    </class>
+</library>

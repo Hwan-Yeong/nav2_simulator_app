@@ -1,0 +1,70 @@
+"""UI parameter schema: filtering by stack/robot, current values, UI values -> Nav2 overrides."""
+import copy
+
+import yaml
+
+from . import paths, paramgen
+
+_schema = None
+
+
+def load():
+    global _schema
+    if _schema is None:
+        _schema = yaml.safe_load(open(paths.data('param_schema.yaml')))
+    return _schema
+
+
+def _targets(p, robot):
+    tg = p.get('targets') or [[p['node'], p['path']]]
+    out = []
+    for node, path in tg:
+        if '{sensor}' in path:
+            out += [[node, path.replace('{sensor}', s['name'])] for s in robot['sensors']]
+        else:
+            out.append([node, path])
+    return out
+
+
+def applicable(p, stack):
+    w = p.get('when') or {}
+    return all(stack.get(k) in v for k, v in w.items())
+
+
+def resolve(stack_id, robot, user_values=None):
+    """Schema entries that apply, each with the default (stack+robot) value and the user's value if set."""
+    st = paramgen.load_stack(stack_id)
+    doc, warn = paramgen.generate(st, robot)
+    sch = load()
+    params = []
+    for p in sch['params']:
+        if not applicable(p, st):
+            continue
+        tg = _targets(p, robot)
+        node, path = tg[0]
+        default = paramgen.get_dotted(paramgen.node_params(doc, node), path)
+        if default is None:
+            continue
+        q = {k: v for k, v in p.items() if k not in ('targets', 'when')}
+        q['default'] = default
+        if user_values and p['id'] in user_values:
+            q['value'] = user_values[p['id']]
+        params.append(q)
+    return dict(groups=sch['groups'], params=params, warnings=warn)
+
+
+def to_overrides(robot, values):
+    """{param_id: value} -> override dict."""
+    by_id = {p['id']: p for p in load()['params']}
+    ov = {}
+    for pid, v in (values or {}).items():
+        p = by_id.get(pid)
+        if p is None or v is None:
+            continue
+        if p['type'] == 'int':
+            v = int(round(float(v)))
+        elif p['type'] == 'float':
+            v = float(v)
+        for node, path in _targets(p, robot):
+            ov.setdefault(node, {})[path] = v
+    return ov

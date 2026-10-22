@@ -1,0 +1,10 @@
+name: 표준 Nav2 (DWB + RotationShim, NavFn A*)
+description: 커스텀 플러그인 없이 Nav2 기본 패키지만 사용. 제어기는 운영과 같다.
+drives: [diff, omni]
+requires: []
+controller: dwb
+planner: navfn
+nav:
+  planner_server!:
+    planner_plugins: [GridBased]
+    GridBased: {plugin: nav2_navfn_planner/NavfnPlanner, tolerance: 0.5, use_astar: true, allow_unknown: false}

@@ -1,0 +1,11 @@
+name: Everybot 원형 로봇
+description: 원형 차동구동 청소로봇. 운영 Nav2 설정(robot_radius 0.19)과 벤치마크에 쓴 기준 모델.
+drive: diff
+footprint: {type: circle, radius: 0.175}
+footprint_padding: 0.015
+body: {height: 0.09, color: '#3d4b55'}
+wheels: {track: 0.27, radius: 0.045, wheelbase: 0.0, max_steer_deg: 0.0}
+limits: {vx_max: 0.5, vx_min: -0.2, vy_max: 0.0, wz_max: 1.5, ax_max: 1.0, ay_max: 1.0, az_max: 4.0}
+actuator: {tau: 0.08, slip_lin: 0.02, slip_ang: 0.03}
+sensors:
+  - {name: scan, type: lidar2d, x: 0.0, y: 0.0, z: 0.107, yaw_deg: 0, fov_deg: 360, beams: 360, range_min: 0.17, range_max: 8.0, hz: 10, noise: 0.01}

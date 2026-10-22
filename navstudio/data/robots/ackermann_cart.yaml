@@ -1,0 +1,14 @@
+name: 차량형 카트 (Ackermann)
+description: 0.90 x 0.55 m, 뒷바퀴 축이 base_link. 제자리 회전 불가, 최소 회전반경 약 0.86 m.
+drive: ackermann
+footprint:
+  type: polygon
+  points: [[0.75, 0.275], [-0.15, 0.275], [-0.15, -0.275], [0.75, -0.275]]
+footprint_padding: 0.03
+body: {height: 0.40, color: '#5b5f97'}
+wheels: {track: 0.46, radius: 0.10, wheelbase: 0.60, max_steer_deg: 35}
+limits: {vx_max: 1.0, vx_min: -0.4, vy_max: 0.0, wz_max: 1.2, ax_max: 0.8, ay_max: 0.0, az_max: 2.0}
+actuator: {tau: 0.15, slip_lin: 0.02, slip_ang: 0.03}
+sensors:
+  - {name: front, type: lidar2d, x: 0.72, y: 0.0, z: 0.30, yaw_deg: 0, fov_deg: 270, beams: 540, range_min: 0.05, range_max: 15.0, hz: 15, noise: 0.01}
+  - {name: rear, type: lidar2d, x: -0.12, y: 0.0, z: 0.30, yaw_deg: 180, fov_deg: 180, beams: 360, range_min: 0.05, range_max: 10.0, hz: 15, noise: 0.01}

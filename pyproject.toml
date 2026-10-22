@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "navstudio"
+version = "0.1.0"
+description = "Nav Studio: 2D Nav2 simulation, benchmarking and parameter tuning in the browser (Everybot)"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Everybot", email = "hyjoe@everybot.net" }]
+license = { text = "Copyright (c) 2026 Everybot. All rights reserved. Bundled third-party code keeps its own license, see NOTICE." }
+dependencies = [
+  "fastapi>=0.110,<1",
+  "uvicorn[standard]>=0.27",
+  "python-multipart>=0.0.9",
+  "numpy>=1.21,<2",   # ROS 2 Humble Python extensions are built against numpy 1.x
+  "scipy>=1.8",
+  "pyyaml>=5.4",
+  "pillow>=9.0",
+  "psutil>=5.9",
+]
+# rclpy and Nav2 come from ROS 2 Humble (apt), not from PyPI.
+
+[project.urls]
+Repository = "https://github.com/Hwan-Yeong/nav2_simulator_app"
+
+[project.optional-dependencies]
+tune = ["optuna>=3.4"]
+dev = ["playwright>=1.40"]
+
+[project.scripts]
+navstudio = "navstudio.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["navstudio*"]
+
+[tool.setuptools.package-data]
+navstudio = [
+  "launch/*.py",
+  "web/*.html", "web/css/*", "web/js/*", "web/img/*", "web/vendor/three/*",
+  "data/*.yaml", "data/base/*", "data/stacks/*", "data/robots/*", "data/presets/*", "data/scenarios/*",
+  "data/maps/*", "data/maps/*/*",
+  "data/plugins_src/*/*", "data/plugins_src/*/*/*", "data/plugins_src/*/*/*/*", "data/plugins_src/*/*/*/*/*",
+]

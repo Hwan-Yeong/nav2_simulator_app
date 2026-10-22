@@ -1,0 +1,14 @@
+name: 사각형 물류 AMR
+description: 0.70 x 0.50 m 차동구동, 대각 모서리 라이다 2개(270°).
+drive: diff
+footprint:
+  type: polygon
+  points: [[0.35, 0.25], [-0.35, 0.25], [-0.35, -0.25], [0.35, -0.25]]
+footprint_padding: 0.02
+body: {height: 0.30, color: '#c4622d'}
+wheels: {track: 0.42, radius: 0.08, wheelbase: 0.0, max_steer_deg: 0.0}
+limits: {vx_max: 1.2, vx_min: -0.3, vy_max: 0.0, wz_max: 1.5, ax_max: 1.0, ay_max: 1.0, az_max: 3.0}
+actuator: {tau: 0.12, slip_lin: 0.02, slip_ang: 0.03}
+sensors:
+  - {name: front, type: lidar2d, x: 0.32, y: 0.22, z: 0.20, yaw_deg: 45, fov_deg: 270, beams: 540, range_min: 0.05, range_max: 15.0, hz: 15, noise: 0.01}
+  - {name: rear, type: lidar2d, x: -0.32, y: -0.22, z: 0.20, yaw_deg: -135, fov_deg: 270, beams: 540, range_min: 0.05, range_max: 15.0, hz: 15, noise: 0.01}

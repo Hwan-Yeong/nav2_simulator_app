@@ -1,0 +1,81 @@
+# Curated Nav2 parameters for the UI.
+# path: dotted path under ros__parameters of `node` (several targets via `targets`).
+# '{sensor}' in a path expands to every lidar of the robot. 'name[i]' addresses a list element.
+# when: show only for these controller / planner kinds (stack preset 'controller' / 'planner').
+groups:
+  - id: speed
+    label: 속도·가속
+  - id: dwb
+    label: DWB 평가 가중치
+  - id: mppi
+    label: MPPI
+  - id: rpp
+    label: Pure Pursuit
+  - id: costmap
+    label: Costmap
+  - id: planner
+    label: 경로 계획
+  - id: control
+    label: 목표·진행 판정
+
+params:
+  # ---------------------------------------------------------------- speed (DWB / RotationShim)
+  - {id: dwb_max_vel_x, group: speed, label: 최대 전진 속도, node: controller_server, path: FollowPath.max_vel_x, type: float, min: 0.05, max: 2.0, step: 0.05, unit: m/s, when: {controller: [dwb]}}
+  - {id: dwb_max_vel_theta, group: speed, label: 최대 회전 속도, node: controller_server, path: FollowPath.max_vel_theta, type: float, min: 0.1, max: 3.0, step: 0.05, unit: rad/s, when: {controller: [dwb]}}
+  - {id: dwb_acc_lim_x, group: speed, label: 전진 가속 한계, node: controller_server, path: FollowPath.acc_lim_x, type: float, min: 0.05, max: 3.0, step: 0.05, unit: m/s², when: {controller: [dwb]}}
+  - {id: dwb_decel_lim_x, group: speed, label: 전진 감속 한계, node: controller_server, path: FollowPath.decel_lim_x, type: float, min: -3.0, max: -0.05, step: 0.05, unit: m/s², help: 음수로 입력, when: {controller: [dwb]}}
+  - {id: shim_rot_vel, group: speed, label: 제자리 회전 속도 (RotationShim), node: controller_server, path: FollowPath.rotate_to_heading_angular_vel, type: float, min: 0.1, max: 3.0, step: 0.05, unit: rad/s, when: {controller: [dwb, rpp]}}
+  - {id: shim_threshold, group: speed, label: 제자리 회전 시작 각도, node: controller_server, path: FollowPath.angular_dist_threshold, type: float, min: 0.1, max: 3.1, step: 0.05, unit: rad, help: 경로 방향과 이 각도 이상 차이 나면 먼저 제자리 회전, when: {controller: [dwb, rpp]}}
+  - {id: vs_max_vx, group: speed, label: smoother 최대 전진 속도, node: velocity_smoother, path: 'max_velocity[0]', type: float, min: 0.05, max: 2.0, step: 0.05, unit: m/s, help: 제어기 명령을 최종적으로 제한하는 값}
+  - {id: vs_max_wz, group: speed, label: smoother 최대 회전 속도, node: velocity_smoother, path: 'max_velocity[2]', type: float, min: 0.1, max: 3.0, step: 0.05, unit: rad/s}
+  - {id: vs_acc_x, group: speed, label: smoother 가속, node: velocity_smoother, path: 'max_accel[0]', type: float, min: 0.05, max: 3.0, step: 0.05, unit: m/s²}
+  - {id: vs_dec_x, group: speed, label: smoother 감속, node: velocity_smoother, path: 'max_decel[0]', type: float, min: -3.0, max: -0.05, step: 0.05, unit: m/s², help: 음수로 입력}
+  # ---------------------------------------------------------------- DWB critics
+  - {id: dwb_base_obstacle, group: dwb, label: BaseObstacle (장애물 회피), node: controller_server, path: FollowPath.BaseObstacle.scale, type: float, min: 0.0, max: 5.0, step: 0.01, when: {controller: [dwb]}}
+  - {id: dwb_path_align, group: dwb, label: PathAlign (경로 방향 정렬), node: controller_server, path: FollowPath.PathAlign.scale, type: float, min: 0.0, max: 100.0, step: 1, when: {controller: [dwb]}}
+  - {id: dwb_path_dist, group: dwb, label: PathDist (경로 이탈 거리), node: controller_server, path: FollowPath.PathDist.scale, type: float, min: 0.0, max: 100.0, step: 1, when: {controller: [dwb]}}
+  - {id: dwb_goal_dist, group: dwb, label: GoalDist (목표 거리), node: controller_server, path: FollowPath.GoalDist.scale, type: float, min: 0.0, max: 100.0, step: 1, when: {controller: [dwb]}}
+  - {id: dwb_goal_align, group: dwb, label: GoalAlign (목표 방향), node: controller_server, path: FollowPath.GoalAlign.scale, type: float, min: 0.0, max: 100.0, step: 1, when: {controller: [dwb]}}
+  - {id: dwb_rotate_to_goal, group: dwb, label: RotateToGoal, node: controller_server, path: FollowPath.RotateToGoal.scale, type: float, min: 0.0, max: 100.0, step: 1, when: {controller: [dwb]}}
+  - {id: dwb_sim_time, group: dwb, label: 궤적 예측 시간, node: controller_server, path: FollowPath.sim_time, type: float, min: 0.5, max: 5.0, step: 0.1, unit: s, when: {controller: [dwb]}}
+  - {id: dwb_vx_samples, group: dwb, label: 전진 속도 샘플 수, node: controller_server, path: FollowPath.vx_samples, type: int, min: 3, max: 40, step: 1, when: {controller: [dwb]}}
+  - {id: dwb_vth_samples, group: dwb, label: 회전 속도 샘플 수, node: controller_server, path: FollowPath.vtheta_samples, type: int, min: 3, max: 40, step: 1, when: {controller: [dwb]}}
+  # ---------------------------------------------------------------- MPPI
+  - {id: mppi_vx_max, group: speed, label: 최대 전진 속도, node: controller_server, path: FollowPath.vx_max, type: float, min: 0.05, max: 2.0, step: 0.05, unit: m/s, when: {controller: [mppi]}}
+  - {id: mppi_vx_min, group: speed, label: 최대 후진 속도, node: controller_server, path: FollowPath.vx_min, type: float, min: -1.0, max: 0.0, step: 0.05, unit: m/s, help: 음수, when: {controller: [mppi]}}
+  - {id: mppi_wz_max, group: speed, label: 최대 회전 속도, node: controller_server, path: FollowPath.wz_max, type: float, min: 0.1, max: 3.0, step: 0.05, unit: rad/s, when: {controller: [mppi]}}
+  - {id: mppi_temperature, group: mppi, label: temperature, node: controller_server, path: FollowPath.temperature, type: float, min: 0.05, max: 1.0, step: 0.01, help: 낮을수록 최선 궤적에 집중, when: {controller: [mppi]}}
+  - {id: mppi_batch, group: mppi, label: 샘플 궤적 수, node: controller_server, path: FollowPath.batch_size, type: int, min: 200, max: 4000, step: 100, help: 클수록 CPU 증가, when: {controller: [mppi]}}
+  - {id: mppi_vx_std, group: mppi, label: vx 샘플 표준편차, node: controller_server, path: FollowPath.vx_std, type: float, min: 0.05, max: 0.6, step: 0.01, when: {controller: [mppi]}}
+  - {id: mppi_wz_std, group: mppi, label: wz 샘플 표준편차, node: controller_server, path: FollowPath.wz_std, type: float, min: 0.05, max: 1.0, step: 0.01, when: {controller: [mppi]}}
+  - {id: mppi_cost_w, group: mppi, label: CostCritic 가중치, node: controller_server, path: FollowPath.CostCritic.cost_weight, type: float, min: 0.0, max: 20.0, step: 0.1, when: {controller: [mppi]}}
+  - {id: mppi_path_align_w, group: mppi, label: PathAlignCritic 가중치, node: controller_server, path: FollowPath.PathAlignCritic.cost_weight, type: float, min: 0.0, max: 40.0, step: 0.5, when: {controller: [mppi]}}
+  - {id: mppi_path_follow_w, group: mppi, label: PathFollowCritic 가중치, node: controller_server, path: FollowPath.PathFollowCritic.cost_weight, type: float, min: 0.0, max: 20.0, step: 0.5, when: {controller: [mppi]}}
+  - {id: mppi_goal_w, group: mppi, label: GoalCritic 가중치, node: controller_server, path: FollowPath.GoalCritic.cost_weight, type: float, min: 0.0, max: 20.0, step: 0.5, when: {controller: [mppi]}}
+  - {id: mppi_fwd_w, group: mppi, label: PreferForwardCritic 가중치, node: controller_server, path: FollowPath.PreferForwardCritic.cost_weight, type: float, min: 0.0, max: 20.0, step: 0.5, when: {controller: [mppi]}}
+  # ---------------------------------------------------------------- RPP
+  - {id: rpp_vel, group: rpp, label: 목표 선속도, node: controller_server, path: FollowPath.desired_linear_vel, type: float, min: 0.05, max: 2.0, step: 0.05, unit: m/s, when: {controller: [rpp]}}
+  - {id: rpp_lookahead, group: rpp, label: lookahead 거리, node: controller_server, path: FollowPath.lookahead_dist, type: float, min: 0.1, max: 3.0, step: 0.05, unit: m, when: {controller: [rpp]}}
+  - {id: rpp_min_la, group: rpp, label: 최소 lookahead, node: controller_server, path: FollowPath.min_lookahead_dist, type: float, min: 0.1, max: 2.0, step: 0.05, unit: m, when: {controller: [rpp]}}
+  - {id: rpp_max_la, group: rpp, label: 최대 lookahead, node: controller_server, path: FollowPath.max_lookahead_dist, type: float, min: 0.2, max: 4.0, step: 0.05, unit: m, when: {controller: [rpp]}}
+  # ---------------------------------------------------------------- costmap
+  - {id: infl_scale, group: costmap, label: inflation 감쇠 계수, node: local_costmap, path: inflation_layer.cost_scaling_factor, targets: [[local_costmap, inflation_layer.cost_scaling_factor], [global_costmap, inflation_layer.cost_scaling_factor]], type: float, min: 0.5, max: 20.0, step: 0.1, help: 클수록 장애물 주변 비용이 빨리 줄어듦 (로컬·전역 동시 적용)}
+  - {id: infl_radius, group: costmap, label: inflation 반경, node: local_costmap, path: inflation_layer.inflation_radius, targets: [[local_costmap, inflation_layer.inflation_radius], [global_costmap, inflation_layer.inflation_radius]], type: float, min: 0.1, max: 2.0, step: 0.01, unit: m}
+  - {id: obs_range, group: costmap, label: 장애물 인식 거리, node: local_costmap, path: 'obstacle_layer.{sensor}.obstacle_max_range', targets: [[local_costmap, 'obstacle_layer.{sensor}.obstacle_max_range'], [global_costmap, 'obstacle_layer.{sensor}.obstacle_max_range']], type: float, min: 0.5, max: 15.0, step: 0.1, unit: m, help: 라이다 점을 장애물로 표시하는 최대 거리 (모든 센서)}
+  - {id: raytrace_range, group: costmap, label: 장애물 지우기 거리, node: local_costmap, path: 'obstacle_layer.{sensor}.raytrace_max_range', targets: [[local_costmap, 'obstacle_layer.{sensor}.raytrace_max_range'], [global_costmap, 'obstacle_layer.{sensor}.raytrace_max_range']], type: float, min: 0.5, max: 15.0, step: 0.1, unit: m}
+  - {id: local_size, group: costmap, label: 로컬 costmap 크기, node: local_costmap, path: width, targets: [[local_costmap, width], [local_costmap, height]], type: int, min: 2, max: 12, step: 1, unit: m}
+  # ---------------------------------------------------------------- planner
+  - {id: eb_w_trav, group: planner, label: 통과 비용 가중치 (w_traversal_cost), node: planner_server, path: GridBased.w_traversal_cost, type: float, min: 0.0, max: 64.0, step: 0.5, help: 클수록 장애물에서 먼 경로를 선호, when: {planner: [everybot_theta]}}
+  - {id: eb_w_euc, group: planner, label: 거리 가중치 (w_euc_cost), node: planner_server, path: GridBased.w_euc_cost, type: float, min: 0.1, max: 5.0, step: 0.1, when: {planner: [everybot_theta]}}
+  - {id: eb_max_cost, group: planner, label: 최대 통과 비용 (실험), node: planner_server, path: GridBased.max_traversable_cost, type: int, min: 100, max: 252, step: 1, help: 252 = 기존 동작. 낮추면 좁은 틈을 피해 우회, when: {planner: [everybot_theta]}}
+  - {id: eb_detour, group: planner, label: 허용 우회 배율 (실험), node: planner_server, path: GridBased.detour_ratio, type: float, min: 0.0, max: 5.0, step: 0.1, help: 0 = 끔. 엄격한 경로가 이 배율보다 길면 기존 경로 사용, when: {planner: [everybot_theta]}}
+  - {id: navfn_tol, group: planner, label: 목표 허용 오차 (NavFn), node: planner_server, path: GridBased.tolerance, type: float, min: 0.0, max: 2.0, step: 0.05, unit: m, when: {planner: [navfn]}}
+  - {id: hy_reverse, group: planner, label: 후진 패널티, node: planner_server, path: GridBased.reverse_penalty, type: float, min: 1.0, max: 10.0, step: 0.1, when: {planner: [smac_hybrid]}}
+  - {id: hy_cost, group: planner, label: 비용 패널티, node: planner_server, path: GridBased.cost_penalty, type: float, min: 0.0, max: 10.0, step: 0.1, when: {planner: [smac_hybrid]}}
+  - {id: smooth_w, group: planner, label: 경로 평활 가중치, node: smoother_server, path: simple_smoother.w_smooth, type: float, min: 0.0, max: 1.0, step: 0.05}
+  # ---------------------------------------------------------------- control / goal
+  - {id: ctrl_hz, group: control, label: 제어 주기, node: controller_server, path: controller_frequency, type: float, min: 5, max: 40, step: 1, unit: Hz}
+  - {id: goal_xy, group: control, label: 목표 위치 허용 오차, node: controller_server, path: general_goal_checker.xy_goal_tolerance, type: float, min: 0.02, max: 1.0, step: 0.01, unit: m}
+  - {id: goal_yaw, group: control, label: 목표 방향 허용 오차, node: controller_server, path: general_goal_checker.yaw_goal_tolerance, type: float, min: 0.05, max: 3.15, step: 0.05, unit: rad, help: 3.14 = 방향 무시}
+  - {id: progress_time, group: control, label: 진행 판정 시간, node: controller_server, path: progress_checker.movement_time_allowance, type: float, min: 2, max: 60, step: 1, unit: s, help: 이 시간 동안 아래 거리만큼 못 움직이면 실패}
+  - {id: progress_radius, group: control, label: 진행 판정 거리, node: controller_server, path: progress_checker.required_movement_radius, type: float, min: 0.05, max: 2.0, step: 0.05, unit: m}

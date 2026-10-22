@@ -1,0 +1,14 @@
+services:
+  navstudio:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: everybot/navstudio:0.1.0
+    ports:
+      - "127.0.0.1:8765:8765"     # this PC only; use "8765:8765" to allow other PCs on the network
+    volumes:
+      - navstudio-data:/data      # saved robots, uploaded maps, benchmark/tuning runs
+    shm_size: 1gb                 # Fast DDS shared-memory transport between the Nav2 processes
+    restart: unless-stopped
+volumes:
+  navstudio-data: {}

@@ -1,0 +1,18 @@
+Nav Studio — Everybot
+
+This distribution includes third-party software:
+
+1. three.js r160 (navstudio/web/vendor/three/)
+   Copyright © 2010-2024 three.js authors. MIT License — see navstudio/web/vendor/three/LICENSE.
+
+2. everybot_path_planner, everybot_theta_star_planner (navstudio/data/plugins_src/)
+   Derived from the Nav2 Theta* planner (nav2_theta_star_planner).
+   Copyright 2020 Anshumaan Singh. Licensed under the Apache License, Version 2.0.
+   The original copyright and license headers are retained in the source files; Everybot renamed the packages
+   and modified the planners (e.g. traversable-cost limit, detour ratio). Full license text: LICENSE in each package.
+   http://www.apache.org/licenses/LICENSE-2.0
+
+3. everybot_behavior_plugins (navstudio/data/plugins_src/)
+   Behavior tree nodes built on the Nav2 behavior tree library (Apache License 2.0).
+
+ROS 2, Nav2, Optuna, FastAPI and the other Python dependencies are installed separately and keep their own licenses.

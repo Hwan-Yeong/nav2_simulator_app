@@ -1,0 +1,14 @@
+name: 메카넘 전방향 AMR
+description: 0.60 x 0.45 m 메카넘 휠, 횡이동 가능.
+drive: omni
+footprint:
+  type: polygon
+  points: [[0.30, 0.225], [-0.30, 0.225], [-0.30, -0.225], [0.30, -0.225]]
+footprint_padding: 0.02
+body: {height: 0.25, color: '#2f6f8f'}
+wheels: {track: 0.40, radius: 0.076, wheelbase: 0.45, max_steer_deg: 0.0}
+limits: {vx_max: 0.8, vx_min: -0.8, vy_max: 0.5, wz_max: 1.2, ax_max: 0.8, ay_max: 0.6, az_max: 2.5}
+actuator: {tau: 0.10, slip_lin: 0.03, slip_ang: 0.04}
+sensors:
+  - {name: front, type: lidar2d, x: 0.27, y: 0.19, z: 0.18, yaw_deg: 45, fov_deg: 270, beams: 540, range_min: 0.05, range_max: 12.0, hz: 15, noise: 0.01}
+  - {name: rear, type: lidar2d, x: -0.27, y: -0.19, z: 0.18, yaw_deg: -135, fov_deg: 270, beams: 540, range_min: 0.05, range_max: 12.0, hz: 15, noise: 0.01}

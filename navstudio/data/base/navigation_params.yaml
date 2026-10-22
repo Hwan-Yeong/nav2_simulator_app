@@ -1,0 +1,564 @@
+# Everybot base navigation params (2026-06-08)
+amcl:
+  ros__parameters:
+    use_sim_time: False
+    alpha1: 0.08 #0.12 #0.08 # 로봇의 회전 운동 모델에 대한 노이즈. 로봇이 회전할 때 예측 오차. 값이 높을수록 노이즈 큼.
+    alpha2: 0.08 #0.12 #0.08 # 로봇의 직진 운동 모델이 대한 노이즈. 로봇이 직진할 때 예측 오차. 값이 높을수록 노이즈 큼.
+    alpha3: 0.12 #0.15 #0.12 # 로봇의 회전 운동 모델에 대한 노이즈. 로봇이 회전할 때 측정된 회전량에 대한 오차. 값이 클수록 노이즈 큼.
+    alpha4: 0.08 #0.12 #0.08 # 로봇의 직진 운동 모델에 대한 노이즈. 로봇이 직진할 때 측정된 이동량에 대한 오차. 값이 클수록 노이즈 큼.
+    alpha5: 0.1  # 로봇의 회전 운동 모델에 대한 노이즈. 로봇이 회전할 때 측정된 화전량에 대한 비선형성. 값이 클수록 노이즈 큼.
+    
+    base_frame_id: "base_link"
+    beam_skip_distance: 0.5
+    beam_skip_error_threshold: 0.9
+    beam_skip_threshold: 0.3
+    do_beamskip: false #true #false
+    global_frame_id: "map"
+    lambda_short: 0.1
+    
+    laser_likelihood_max_dist: 4.0 # 이 거리보다 먼 라이다 데이터는 위치추정에 사용하지 않는다.
+
+    laser_max_range: 10.0
+    laser_min_range: 0.0
+    
+    laser_model_type: "likelihood_field"
+    max_beams: 100
+    max_particles: 2000
+    min_particles: 200
+    
+    odom_frame_id: "odom"
+    
+    pf_err: 0.1       #0.02 #0.1 # 입자 필터의 위치추정 오차. 낮으면 위치 추정 정확도 높아지긴 하나 계산비용도 높아짐
+    pf_z: 0.99        # 입자필터의 재샘플링 가중치. 높은 값일수록 입자 중요도에 따른 재샘플링이 더 강조됨.
+    
+    recovery_alpha_fast: 0.001 # 빠른 회복 모드에서 사용하는 값. 회복 모드는 위치 추정에 문제가 있을 때 로봇이 회복하는 방법을 지정. 
+    recovery_alpha_slow: 0.01  # 느린 회복 모드에서 사용하는 회복 알파 값.
+    
+    resample_interval: 1
+    robot_model_type: "nav2_amcl::DifferentialMotionModel"
+    save_pose_rate: 0.5
+    
+    sigma_hit: 0.1     # 레이저 스캐너에서의 측정값과 예상값 사이의 표준 편차.
+    
+    tf_broadcast: true
+    transform_tolerance: 0.5 #0.3
+
+    update_min_a: 0.1    #0.05 #0.017  #0.1 # 로봇의 각도 변화가 일정 값보다 큰 경우 위치 추정 수행.
+    update_min_d: 0.02   #0.05 #0.2 # 로봇의 이동변화가 일정 값보다 큰 경우 위치 추정을 수행.
+   
+    z_hit: 0.9
+    z_max: 0.05
+    z_rand: 0.1
+    z_short: 0.05
+    
+    scan_topic: /scan
+    
+    #set_initial_pose: true
+    #initial_pose.x : 0.0
+    #initial_pose.y : 0.0
+    #initial_pose.z : 0.0
+    #initial_pose.yaw : 0.0
+    
+amcl_map_client:
+  ros__parameters:
+    use_sim_time: False
+
+amcl_rclcpp_node:
+  ros__parameters:
+    use_sim_time: False
+
+
+bt_navigator:
+  ros__parameters:
+    use_sim_time: False
+    global_frame: map
+    robot_base_frame: base_link
+    odom_topic: /odom
+    bt_loop_duration: 10
+    default_server_timeout: 100
+    wait_for_service_timeout: 1000
+    default_nav_to_pose_bt_xml : /home/everybot/everybot_ws/install/everybot_navigation/share/everybot_navigation/behavior_tree/everybot_behavior_obstacle.xml
+ 
+    # behavior_tree: /opt/ros/humble/share/nav2_bt_navigator/behavior_trees/nav_to_pose_with_consistent_replanning_and_if_path_becomes_invalid.xml
+    # 'default_nav_through_poses_bt_xml' and 'default_nav_to_pose_bt_xml' are use defaults:
+    # nav2_bt_navigator/navigate_to_pose_w_replanning_and_recovery.xml
+    # nav2_bt_navigator/navigate_through_poses_w_replanning_and_recovery.xml
+    # They can be set here or via a RewrittenYaml remap from a parent launch file to Nav2.
+    plugin_lib_names:
+      - nav2_compute_path_to_pose_action_bt_node
+      - nav2_compute_path_through_poses_action_bt_node
+      - nav2_smooth_path_action_bt_node
+      - nav2_follow_path_action_bt_node
+      - nav2_spin_action_bt_node
+      - nav2_wait_action_bt_node
+      - nav2_assisted_teleop_action_bt_node
+      - nav2_back_up_action_bt_node
+      - nav2_drive_on_heading_bt_node
+      - nav2_clear_costmap_service_bt_node
+      - nav2_is_stuck_condition_bt_node
+      - nav2_goal_reached_condition_bt_node
+      - nav2_goal_updated_condition_bt_node
+      - nav2_globally_updated_goal_condition_bt_node
+      - nav2_is_path_valid_condition_bt_node
+      - nav2_initial_pose_received_condition_bt_node
+      - nav2_reinitialize_global_localization_service_bt_node
+      - nav2_rate_controller_bt_node
+      - nav2_distance_controller_bt_node
+      - nav2_speed_controller_bt_node
+      - nav2_truncate_path_action_bt_node
+      - nav2_truncate_path_local_action_bt_node
+      - nav2_goal_updater_node_bt_node
+      - nav2_recovery_node_bt_node
+      - nav2_pipeline_sequence_bt_node
+      - nav2_round_robin_node_bt_node
+      - nav2_transform_available_condition_bt_node
+      - nav2_time_expired_condition_bt_node
+      - nav2_path_expiring_timer_condition
+      - nav2_distance_traveled_condition_bt_node
+      - nav2_single_trigger_bt_node
+      - nav2_goal_updated_controller_bt_node
+      - nav2_is_battery_low_condition_bt_node
+      - nav2_navigate_through_poses_action_bt_node
+      - nav2_navigate_to_pose_action_bt_node
+      - nav2_remove_passed_goals_action_bt_node
+      - nav2_planner_selector_bt_node
+      - nav2_controller_selector_bt_node
+      - nav2_goal_checker_selector_bt_node
+      - nav2_controller_cancel_bt_node
+      - nav2_path_longer_on_approach_bt_node
+      - nav2_wait_cancel_bt_node
+      - nav2_spin_cancel_bt_node
+      - nav2_back_up_cancel_bt_node
+      - nav2_assisted_teleop_cancel_bt_node
+      - nav2_drive_on_heading_cancel_bt_node
+      - nav2_is_battery_charging_condition_bt_node
+      - everybot_are_poses_near_condition_bt_node
+      - everybot_goal_updater_node_bt_node
+
+
+# bt_navigator_navigate_through_poses_rclcpp_node:
+#   ros__parameters:
+#     use_sim_time: False
+
+bt_navigator_navigate_to_pose_rclcpp_node:
+  ros__parameters:
+    use_sim_time: False
+
+controller_server:
+  ros__parameters:
+    use_sim_time: False
+    controller_frequency: 10.0
+    controller_patience: 10.0
+    min_x_velocity_threshold: 0.001
+    min_y_velocity_threshold: 0.5
+    min_theta_velocity_threshold: 0.001
+    failure_tolerance: 10.0
+    progress_checker_plugin: "progress_checker"
+    goal_checker_plugins: ["general_goal_checker"] # "precise_goal_checker"
+    controller_plugins: ["FollowPath"]
+
+    # Progress checker parameters
+    progress_checker:
+      plugin: "nav2_controller::SimpleProgressChecker"
+      required_movement_radius: 0.5 #0.25
+      movement_time_allowance: 10.0
+    # Goal checker parameters
+    #precise_goal_checker:
+    #  plugin: "nav2_controller::SimpleGoalChecker"
+    #  xy_goal_tolerance: 0.25
+    #  yaw_goal_tolerance: 0.25
+    #  stateful: True
+    general_goal_checker:
+      stateful: True
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.25
+      yaw_goal_tolerance: 3.14
+    # DWB parameters
+    FollowPath:
+      plugin: "nav2_rotation_shim_controller::RotationShimController"
+      primary_controller: "dwb_core::DWBLocalPlanner"
+      angular_dist_threshold: 0.785 #0.785
+      angular_disengage_threshold: 0.2    # 회전 종료 각도 (제자리 회전을 멈추는 경로 방향 오차)
+      forward_sampling_distance: 0.3
+      
+      # rotate_to_heading_angular_vel: 1.0
+      rotate_to_heading_angular_vel: 1.0
+      
+      max_angular_accel: 5.0
+      simulate_ahead_time: 1.0  #1.0
+      debug_trajectory_details: True
+      #min_vel_x: 0.08
+      min_vel_x: 0.1
+      min_vel_y: 0.0
+      max_vel_x: 0.4
+      max_vel_y: 0.0
+      max_vel_theta: 1.0 #0.8
+      min_speed_xy: 0.05
+      max_speed_xy: 0.45
+      min_speed_theta: 0.2
+      # Add high threshold velocity for turtlebot 3 issue.
+      # https://github.com/ROBOTIS-GIT/turtlebot3_simulations/issues/75
+      acc_lim_x: 0.25 #2.5
+      acc_lim_y: 0.0
+      acc_lim_theta: 3.0 #10.0
+      # decel_lim_x: -0.25 #-2.5
+      decel_lim_x: -1.0 #-2.5
+      decel_lim_y: 0.0
+      decel_lim_theta: -3.0 #-10.0
+      vx_samples: 20
+      vy_samples: 5
+      vtheta_samples: 20
+      sim_time: 2.0
+      linear_granularity: 0.05
+      angular_granularity: 0.025
+      transform_tolerance: 0.3
+      
+      #xy_goal_tolerance: 0.1
+      xy_goal_tolerance: 0.05
+      
+      trans_stopped_velocity: 0.2
+      short_circuit_trajectory_evaluation: True
+      stateful: True
+      critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
+      BaseObstacle.scale: 0.5 #0.02
+      PathAlign.scale: 64.0
+      PathAlign.forward_point_distance: 0.3
+      PathDist.scale: 16.0
+      GoalAlign.scale: 10.0
+      GoalAlign.forward_point_distance: 0.3
+      GoalDist.scale: 10.0
+      RotateToGoal.scale: 32.0
+      RotateToGoal.slowing_factor: 5.0
+      RotateToGoal.lookahead_time: -1.0
+
+local_costmap:
+  local_costmap:
+    ros__parameters:
+      update_frequency: 5.0
+      publish_frequency: 5.0
+      global_frame: map
+      robot_base_frame: base_link
+      use_sim_time: False
+      rolling_window: true
+      width: 4
+      height: 4
+      resolution: 0.05
+      robot_radius: 0.19
+      plugins: ["static_layer", "obstacle_layer", "perception_replace_layer", "cliff_replace_layer", "inflation_layer"] #, "voxel_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        enabled: True
+        footprint_clearing_enabled: false
+        min_obstacle_height: -3.0
+        max_obstacle_height: 10.0
+        observation_sources: scan keepout_zones
+        scan:
+          topic: /scan
+          min_obstacle_height: -3.0
+          max_obstacle_height: 10.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 2.0
+          raytrace_min_range: 0.17
+          obstacle_max_range: 2.0
+          obstacle_min_range: 0.17
+          observation_persistence: 0.0
+
+        # perception source는 perception_replace_layer 로 이전 (raytracing 잔상 fix)
+        # perception:
+        #   sensor_frame: base_link
+        #   topic: /perception/output
+        #   ...
+
+        keepout_zones:
+          topic: /everybot_keepout/point_cloud
+          sensor_frame: "base_link"
+          max_obstacle_height: 2.0
+          min_obstacle_height: -2.0
+          clearing: True
+          marking: True
+          data_type: "PointCloud2"
+          raytrace_max_range: 10.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 5.0
+          obstacle_min_range: 0.0
+          observation_persistence: 5.0
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True
+      perception_replace_layer:
+        plugin: "everybot_nav/PerceptionReplaceLayer"
+        enabled: true
+        topic: "/perception/output"
+        transform_tolerance: 0.2
+        timeout_sec: 0.5
+        min_obstacle_height: -0.5
+        max_obstacle_height: 2.0
+        clear_on_timeout: true
+      # ★ CliffReplaceLayer — drop-IR cliff 가상벽 전용(라이다 raytrace 면역).
+      #   everybot_keepout 이 keepout_enable 무관 always-on 으로 발행하는 /everybot_keepout/cliff_point_cloud
+      #   를 구독, replace 방식 마킹(updateWithMax) → scan(clearing) 이 cliff 셀을 못 지운다.
+      #   미션종료 시 everybot_keepout 이 빈 cloud 발행 → replace 로 clear. inflation 앞에 둬 cliff 주변 팽창.
+      cliff_replace_layer:
+        plugin: "everybot_nav/CliffReplaceLayer"
+        enabled: true
+        topic: "/everybot_keepout/cliff_point_cloud"
+        transform_tolerance: 0.2
+        timeout_sec: 10.0        # clear_on_timeout=true 일 때만 유효 (false 면 stale cloud 로 계속 재도색 — 값 무의미, 스톨은 WARN 로그로만 표시)
+        clear_on_timeout: false  # cliff(낙하위험)는 발행 스톨에도 유지 — 정상 clear 는 미션종료 빈 cloud replace
+        min_obstacle_height: -2.0
+        max_obstacle_height: 2.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 10.0
+        inflation_radius: 0.45
+      always_send_full_costmap: True
+      unknown_cost_value: 255
+      lethal_cost_threshold: 254
+      filters: ["keepout_filter"]
+      keepout_filter:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: true
+        filter_info_topic: "/keepout_costmap_filter_info"
+        mask_topic: "/keepout_filter_mask"
+
+global_costmap:
+  global_costmap:
+    ros__parameters:
+      update_frequency: 5.0
+      publish_frequency: 5.0
+      global_frame: map
+      robot_base_frame: base_link
+      use_sim_time: False
+      robot_radius: 0.19
+      width: 100
+      height: 100
+      resolution: 0.05
+      plugins: ["static_layer", "obstacle_layer", "perception_replace_layer", "cliff_replace_layer", "inflation_layer"]
+      obstacle_layer:
+        plugin: "nav2_costmap_2d::ObstacleLayer"
+        footprint_clearing_enabled: false
+        enabled: True
+        min_obstacle_height: -3.0
+        max_obstacle_height: 10.0
+        observation_sources: scan keepout_zones
+        scan:
+          topic: /scan
+          min_obstacle_height: -3.0
+          max_obstacle_height: 10.0
+          clearing: True
+          marking: True
+          data_type: "LaserScan"
+          raytrace_max_range: 2.0
+          raytrace_min_range: 0.17
+          obstacle_max_range: 2.0
+          obstacle_min_range: 0.17
+          observation_persistence: 0.0
+
+        # perception source는 perception_replace_layer 로 이전 (raytracing 잔상 fix)
+        # perception:
+        #   sensor_frame: base_link
+        #   topic: /perception/output
+        #   ...
+
+        keepout_zones:
+          topic: /everybot_keepout/point_cloud
+          sensor_frame: "map"
+          max_obstacle_height: 2.0
+          min_obstacle_height: -2.0
+          clearing: True
+          marking: True
+          data_type: "PointCloud2"
+          raytrace_max_range: 10.0
+          raytrace_min_range: 0.0
+          obstacle_max_range: 100.0
+          obstacle_min_range: 0.0
+          observation_persistence: 5.0
+      static_layer:
+        plugin: "nav2_costmap_2d::StaticLayer"
+        map_subscribe_transient_local: True
+      perception_replace_layer:
+        plugin: "everybot_nav/PerceptionReplaceLayer"
+        enabled: true
+        topic: "/perception/output"
+        transform_tolerance: 0.2
+        timeout_sec: 0.5
+        min_obstacle_height: -0.5
+        max_obstacle_height: 2.0
+        clear_on_timeout: true
+      # ★ CliffReplaceLayer — drop-IR cliff 가상벽 전용(라이다 raytrace 면역).
+      #   everybot_keepout 이 keepout_enable 무관 always-on 으로 발행하는 /everybot_keepout/cliff_point_cloud
+      #   를 구독, replace 방식 마킹(updateWithMax) → scan(clearing) 이 cliff 셀을 못 지운다.
+      #   미션종료 시 everybot_keepout 이 빈 cloud 발행 → replace 로 clear. inflation 앞에 둬 cliff 주변 팽창.
+      cliff_replace_layer:
+        plugin: "everybot_nav/CliffReplaceLayer"
+        enabled: true
+        topic: "/everybot_keepout/cliff_point_cloud"
+        transform_tolerance: 0.2
+        timeout_sec: 10.0        # clear_on_timeout=true 일 때만 유효 (false 면 stale cloud 로 계속 재도색 — 값 무의미, 스톨은 WARN 로그로만 표시)
+        clear_on_timeout: false  # cliff(낙하위험)는 발행 스톨에도 유지 — 정상 clear 는 미션종료 빈 cloud replace
+        min_obstacle_height: -2.0
+        max_obstacle_height: 2.0
+      inflation_layer:
+        plugin: "nav2_costmap_2d::InflationLayer"
+        cost_scaling_factor: 10.0
+        inflation_radius: 0.45
+      always_send_full_costmap: True
+      unknown_cost_value: 255
+      track_unknown_space: True
+      lethal_cost_threshold: 254
+      filters: ["keepout_filter"]
+      keepout_filter:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: true
+        filter_info_topic: "/keepout_costmap_filter_info"
+        mask_topic: "/keepout_filter_mask"
+
+      
+
+map_server:
+  ros__parameters:
+    use_sim_time: False
+    # Overridden in launch by the "map" launch configuration or provided default value.
+    # To use in yaml, remove the default "map" value in the tb3_simulation_launch.py file & provide full path to map below.
+    yaml_filename: ""
+
+map_saver:
+  ros__parameters:
+    use_sim_time: False
+    save_map_timeout: 5.0
+    free_thresh_default: 0.196
+    occupied_thresh_default: 0.65
+    map_subscribe_transient_local: True
+
+recoveries_server:
+  ros__parameters:
+    costmap_topic: local_costmap/costmap_raw
+    footprint_topic: local_costmap/published_footprint
+    cycle_frequency: 10.0
+    recovery_plugins: ["spin", "backup", "wait"]
+    # recovery_plugins: ["spin", "backup"]
+    spin:
+      plugin: "nav2_recoveries/Spin"
+    backup:
+      plugin: "nav2_recoveries/BackUp"
+    wait:
+      plugin: "nav2_recoveries/Wait"
+    global_frame: odom
+    robot_base_frame: base_link
+    transform_timeout: 0.1
+    use_sim_time: False
+    simulate_ahead_time: 2.0
+    # max_rotational_vel: 0.3
+    # min_rotational_vel: 0.2
+    max_rotational_vel: 0.6
+    min_rotational_vel: 0.4
+    rotational_acc_lim: 1.5
+
+planner_server:
+  ros__parameters:
+    expected_planner_frequency: 5.0
+    planner_patience: 5.0
+    replanning: true
+    use_sim_time: False
+    planner_plugins: ["GridBased", "GridBasedMapping"]
+    GridBased:
+      ########## everbot default################
+      # plugin: "nav2_navfn_planner/NavfnPlanner"
+      # tolerance: 0.5
+      # use_astar: false
+      # allow_unknown: true
+
+      plugin: "everybot_path_planner/PathPlanner"
+      allow_unknown: false
+      how_many_corners: 8
+      w_euc_cost: 1.0
+      w_traversal_cost: 8.0 # costmap 을 침범하는 경로를 막기 위해 4 -> 8 로 증가
+      w_heuristic_cost: 1.0
+    GridBasedMapping:
+      plugin: "everybot_theta_star_planner/ThetaStarPlanner"
+      allow_unknown: true
+      how_many_corners: 8
+      w_euc_cost: 1.0
+      w_traversal_cost: 8.0 # costmap 을 침범하는 경로를 막기 위해 4 -> 8 로 증가
+      w_heuristic_cost: 1.0
+
+smoother_server:
+  ros__parameters:
+    use_sim_time: False
+    local_costmap_topic: local_costmap/costmap_raw
+    local_footprint_topic: local_costmap/published_footprint
+    global_costmap_topic: global_costmap/costmap
+    robot_base_frame: base_link
+    smoother_plugins: ["simple_smoother"]
+    simple_smoother:
+      plugin: "nav2_smoother::SimpleSmoother"
+      tolerance: 1.0e-10
+      max_its: 1000 
+      w_data: 0.2       # 원래경로 보존 수치(default: 0.2)
+      w_smooth: 0.5     # 매끄러움 가중치 (default: 0.3)
+      do_refinement: True
+
+behavior_server:
+  ros__parameters:
+    local_costmap_topic: local_costmap/costmap_raw
+    local_footprint_topic: local_costmap/published_footprint
+    global_costmap_topic: global_costmap/costmap
+    cycle_frequency: 10.0
+    behavior_plugins: ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
+    spin:
+      plugin: "nav2_behaviors/Spin"
+    backup:
+      plugin: "nav2_behaviors/BackUp"
+    drive_on_heading:
+      plugin: "nav2_behaviors/DriveOnHeading"
+    wait:
+      plugin: "nav2_behaviors/Wait"
+
+    assisted_teleop:
+      plugin: "nav2_behaviors/AssistedTeleop"
+    global_frame: odom
+    robot_base_frame: base_link
+    transform_tolerance: 0.2
+    use_sim_time: False
+    simulate_ahead_time: 2.0
+    # max_rotational_vel: 0.3
+    # min_rotational_vel: -0.1
+    
+    max_rotational_vel: 0.6
+    min_rotational_vel: -0.6
+
+    rotational_acc_lim: 1.5
+
+robot_state_publisher:
+  ros__parameters:
+    use_sim_time: False
+
+waypoint_follower:
+  ros__parameters:
+    use_sim_time: False
+    loop_rate: 20
+    stop_on_failure: false
+    waypoint_task_executor_plugin: "wait_at_waypoint"
+    wait_at_waypoint:
+      plugin: "nav2_waypoint_follower::WaitAtWaypoint"
+      enabled: True
+      waypoint_pause_duration: 200
+
+velocity_smoother:
+  ros__parameters:
+    use_sim_time: False
+    smoothing_frequency: 20.0
+    scale_velocities: False
+    feedback: "OPEN_LOOP"
+    max_velocity: [0.4, 0.0, 0.6]
+    min_velocity: [-0.4, 0.0, -0.6]
+    max_accel: [0.25, 0.0, 1.0] #[2.5, 0.0, 10.0]
+    max_decel: [-0.25, 0.0, -1.0] #[-2.5, 0.0, -10.0]
+    odom_topic: "odom"
+    odom_duration: 0.1
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
+
+

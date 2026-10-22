@@ -1,0 +1,7 @@
+name: 운영 설정 (DWB + RotationShim, Everybot Theta*)
+description: 운영 navigation_params.yaml 그대로.
+drives: [diff, omni]
+requires: [everybot_path_planner, everybot_theta_star_planner, everybot_behavior_plugins]
+controller: dwb
+planner: everybot_theta
+nav: {}

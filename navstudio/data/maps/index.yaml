@@ -1,0 +1,5 @@
+# display names for bundled maps (id: {name, group, description})
+synth_narrow: {name: 좁은 문, group: 합성, description: 폭 0.55~0.90 m 문으로 연결된 방 6개}
+synth_clutter: {name: 테이블·의자, group: 합성, description: 테이블 다리와 의자 다리가 빽빽한 방}
+synth_corridor: {name: 복도·막다른 길, group: 합성, description: 0.9 m 복도와 막다른 가지}
+synth_warehouse: {name: 물류 창고, group: 합성, description: 2.6 m 통로의 선반 블록 2개. 큰 로봇·차량형용 (시나리오는 0.9 m 로봇 기준)}

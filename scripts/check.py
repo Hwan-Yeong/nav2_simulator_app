@@ -174,6 +174,11 @@ def check_data():
         for st in p.get('stacks') or [p.get('stack', 'prod')]:
             if st not in stacks:
                 fail(f'{os.path.relpath(f, ROOT)}: unknown stack {st}')
+    # every source a plugin's CMakeLists names must be in the repository (a stray ignore rule once dropped src/)
+    for cm in glob.glob(os.path.join(data, 'plugins_src', '*', 'CMakeLists.txt')):
+        for src in set(re.findall(r'\b((?:src|test)/[\w/.-]+\.(?:cpp|cc|c|hpp|h))\b', open(cm).read())):
+            if not os.path.exists(os.path.join(os.path.dirname(cm), src)):
+                fail(f'{os.path.relpath(cm, ROOT)}: source {src} is missing')
     ids = [p['id'] for p in yaml.safe_load(open(os.path.join(data, 'param_schema.yaml')))['params']]
     dup = {i for i in ids if ids.count(i) > 1}
     if dup:

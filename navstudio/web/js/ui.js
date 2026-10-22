@@ -36,6 +36,12 @@ const P = {
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/>',
   tune: '<path d="M3 17l5-6 4 4 4-7 5 9"/>',
+  chevron: '<path d="M7 10l5 5 5-5"/>',
+  power: '<path d="M12 3v8"/><path d="M6.3 7.2a8 8 0 1 0 11.4 0"/>',
+  more: '<circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/>',
+  save: '<path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
+  grid: '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
+  flag: '<path d="M6 21V4"/><path d="M6 4h11l-2.5 4L17 12H6"/>',
 };
 
 export function icon(name, cls = 'i') {
@@ -84,6 +90,46 @@ export function modal(title, body, foot = []) {
   const close = () => { m.hidden = true; };
   document.getElementById('modalClose').onclick = close;
   m.onclick = (e) => { if (e.target === m) close(); };
+  return close;
+}
+
+// confirmation dialog -> Promise<boolean>
+export function confirmDlg(title, text, okLabel = '확인', danger = false) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; close(); resolve(v); } };
+    const close = modal(title, h('p', { class: 'confirm-text', text }),
+      [btn('취소', { onclick: () => finish(false) }), btn(okLabel, { cls: danger ? 'danger' : 'primary', onclick: () => finish(true) })]);
+    const m = document.getElementById('modal');
+    const prev = m.onclick;
+    m.onclick = (e) => { if (e.target === m) finish(false); else if (prev) prev(e); };
+    document.getElementById('modalClose').onclick = () => finish(false);
+  });
+}
+
+// popup menu under an anchor element. items: [{label, sub, icon, onclick, disabled, tag}] | {heading} | 'sep'
+let openMenu = null;
+export function menu(anchor, items) {
+  if (openMenu) openMenu.remove();
+  const m = h('div', { class: 'menu', role: 'menu' }, ...items.map((it) => {
+    if (it === 'sep') return h('hr');
+    if (it.heading) return h('div', { class: 'mhead', text: it.heading });
+    return h('button', { role: 'menuitem', disabled: it.disabled, 'aria-checked': it.checked ? 'true' : null,
+      onclick: () => { close(); it.onclick && it.onclick(); } },
+    it.icon ? h('span', { html: icon(it.icon) }) : h('span'),
+    h('span', { class: 't' }, h('b', { text: it.label }), it.sub ? h('small', { text: it.sub }) : ''),
+    it.tag ? h('span', { class: 'tag', text: it.tag }) : '');
+  }));
+  document.body.append(m);
+  const r = anchor.getBoundingClientRect();
+  const w = m.offsetWidth, hgt = m.offsetHeight;
+  m.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
+  m.style.top = `${r.bottom + 4 + hgt > innerHeight - 8 ? Math.max(8, r.top - hgt - 4) : r.bottom + 4}px`;
+  const away = (e) => { if (!m.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) close(); };
+  const key = (e) => { if (e.key === 'Escape') close(); };
+  function close() { m.remove(); openMenu = null; document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', key, true); }
+  setTimeout(() => { document.addEventListener('pointerdown', away, true); document.addEventListener('keydown', key, true); });
+  openMenu = m;
   return close;
 }
 

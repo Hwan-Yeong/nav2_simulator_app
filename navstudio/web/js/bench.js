@@ -1,7 +1,7 @@
 // Benchmark workspace: compare configurations over many scenarios, inspect and replay episodes.
 import { api } from './api.js';
-import { S, emit, mapName, stackOf } from './state.js';
-import { h, icon, btn, toast, modal, fmt, persist, DRIVE_LABEL } from './ui.js';
+import { S, emit, mapName, stackOf, cfgLabel, SLOT_NAMES } from './state.js';
+import { h, icon, btn, toast, modal, menu, fmt, persist, DRIVE_LABEL } from './ui.js';
 import { Viewport } from './viewport.js';
 
 const $ = (id) => document.getElementById(id);
@@ -9,6 +9,7 @@ let root, left, main;
 let current = null;      // open run id
 let poll = null;
 let draft = null;        // new-run form state
+let formOpen = false;    // the new-run form is showing (survives switching workspaces)
 
 const CATS = { nominal: '정상', unmapped: '미등록 장애물', dynamic: '보행자' };
 const STATUS = { succeeded: '성공', aborted: '중단', timeout: '시간 초과', canceled: '취소', rejected: '거부', sim_timeout: '오류', stack_failed: '오류' };
@@ -22,12 +23,33 @@ export function show() {
     draft = persist('benchDraft') || null;
   }
   renderLeft();
-  if (current) openRun(current); else renderEmpty();
+  if (current) openRun(current); else if (formOpen) renderForm(); else renderEmpty();
 }
 
 // ================================================================== shared pieces (also used by tune.js)
 export function currentConfig(name = '현재 시뮬레이션 설정') {
   return { name, robot_id: S.sel.robot ? null : S.sel.robotId, robot: S.sel.robot, stack: S.sel.stack, values: { ...S.sel.values }, raw: S.sel.raw || '' };
+}
+
+// the configurations of the live comparison slots (simulation workspace), as benchmark configs
+export function slotConfigs() {
+  return S.slots.slice(0, S.nSlots).map((sl, i) => ({ name: `${SLOT_NAMES[i]} · ${cfgLabel(i).name}`, robot_id: S.sel.robot ? null : S.sel.robotId,
+    robot: S.sel.robot, stack: sl.cfg.stack, values: { ...sl.cfg.values }, raw: sl.cfg.raw || '' }));
+}
+
+// config sets and stack defaults to pick from (menu items); pick(cfg) receives a benchmark config
+export function setMenuItems(pick) {
+  const robot = { robot_id: S.sel.robot ? null : S.sel.robotId, robot: S.sel.robot };
+  const drive = S.robotProfile ? S.robotProfile.drive : 'diff';
+  const okStack = (id) => { const st = stackOf(id); return !st || st.drives.includes(drive); };
+  return [
+    { heading: '설정 세트' },
+    ...S.presets.map((p) => ({ label: p.name, sub: p.description, tag: p.builtin ? '기본' : '내 세트', disabled: !okStack(p.stack),
+      onclick: () => pick({ name: p.name, ...robot, stack: p.stack, values: { ...p.values }, raw: p.raw || '', preset: p.id }) })),
+    { heading: '스택 기본값' },
+    ...S.stacks.map((st) => ({ label: st.name, sub: st.description, disabled: !okStack(st.id),
+      onclick: () => pick({ name: st.name.replace(/\s*\(.*\)/, ''), ...robot, stack: st.id, values: {}, raw: '' }) })),
+  ];
 }
 
 export function configLabel(c) {
@@ -76,6 +98,7 @@ function statusLabel(s) { return { preparing: '준비 중', running: '실행 중
 
 export function newRun(prefill) {
   current = null;
+  formOpen = true;
   clearInterval(poll);
   draft = prefill || draft || {
     name: '벤치마크 ' + new Date().toLocaleDateString(), workers: 4,
@@ -96,10 +119,10 @@ function renderForm() {
     h('button', { class: 'reset', title: '빼기', 'aria-label': '설정 빼기', html: icon('x'), disabled: d.configs.length <= 1, onclick: () => { d.configs.splice(i, 1); sync(true); } }))));
   const addRow = h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
     btn('현재 설정', { cls: 'sm', icon: 'plus', disabled: d.configs.length >= 4, onclick: () => { d.configs.push(currentConfig(`설정 ${d.configs.length + 1}`)); sync(true); } }),
-    ...S.presets.map((p) => btn(p.name, { cls: 'sm', icon: 'plus', disabled: d.configs.length >= 4, title: p.description,
-      onclick: () => { d.configs.push({ name: p.name, robot_id: S.sel.robot ? null : S.sel.robotId, robot: S.sel.robot, stack: (p.stacks || [S.sel.stack])[0], values: { ...p.values }, raw: '' }); sync(true); } })),
-    btn('스택 기본값', { cls: 'sm', icon: 'plus', disabled: d.configs.length >= 4,
-      onclick: () => { d.configs.push({ ...currentConfig('스택 기본값'), values: {}, raw: '' }); sync(true); } }));
+    btn('설정 세트·스택', { cls: 'sm', icon: 'plus', disabled: d.configs.length >= 4, title: '저장한 설정 세트나 스택 기본값을 추가',
+      onclick: (e) => menu(e.currentTarget, setMenuItems((c) => { if (d.configs.length < 4) { d.configs.push(c); sync(true); } })) }),
+    S.nSlots > 1 ? btn(`동시 실행 슬롯 ${S.nSlots}개`, { cls: 'sm', icon: 'grid', title: '시뮬레이션 탭에서 나란히 띄운 설정들로 바꿉니다',
+      onclick: () => { d.configs = slotConfigs(); sync(true); } }) : '');
   const workers = h('b', { class: 'num', text: d.workers });
   const est = h('div', { class: 'hint num', text: estimate() });
   main.replaceChildren(
@@ -141,6 +164,7 @@ function renderEmpty() {
 // ================================================================== run view
 async function openRun(id) {
   current = id;
+  formOpen = false;
   clearInterval(poll);
   await refresh();
   renderLeft();

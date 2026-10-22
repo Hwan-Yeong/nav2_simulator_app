@@ -53,13 +53,14 @@ def resolve(stack_id, robot, user_values=None):
     return dict(groups=sch['groups'], params=params, warnings=warn)
 
 
-def to_overrides(robot, values):
-    """{param_id: value} -> override dict."""
+def to_overrides(robot, values, stack_id=None):
+    """{param_id: value} -> override dict. With stack_id, values of parameters that do not apply to it are dropped."""
     by_id = {p['id']: p for p in load()['params']}
+    st = paramgen.load_stack(stack_id) if stack_id else None
     ov = {}
     for pid, v in (values or {}).items():
         p = by_id.get(pid)
-        if p is None or v is None:
+        if p is None or v is None or (st is not None and not applicable(p, st)):
             continue
         if p['type'] == 'int':
             v = int(round(float(v)))

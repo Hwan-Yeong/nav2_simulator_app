@@ -27,11 +27,12 @@ export class Viewport {
     this.view = { cx: 0, cy: 0, s: 40 };
     this.map = null;          // {meta, img (offscreen canvas)}
     this.costmaps = { global: null, local: null };
-    this.layers = Object.assign({ map: true, global: true, local: true, scan: true, plan: true, trail: true, grid: false }, opts.layers || {});
+    this.layers = Object.assign({ map: true, global: true, local: true, scan: true, plan: true, trail: true, grid: false, others: true }, opts.layers || {});
     this.scene = { static_obs: [], dyn_obs: [], start: null, goal: null };
     this.live = null;         // sim state
     this.plans = { global: null, local: null };
     this.robot = null;        // profile
+    this.robotColor = null;   // overrides --robot (comparison slots)
     this.trail = [];
     this.tool = 'select';
     this.toolOpts = { poleR: 0.1, chairSize: 0.45, pedSpeed: 0.6, pedR: 0.22 };
@@ -45,7 +46,12 @@ export class Viewport {
     this._bind();
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
     this.resize();
-    const loop = () => { if (this.dirty || this.live) this.draw(); requestAnimationFrame(loop); };
+    // views of a comparison share one `view` object: redraw when it moved even if this one is idle
+    const loop = () => {
+      const sig = `${this.view.cx},${this.view.cy},${this.view.s}`;
+      if (this.W > 1 && this.H > 1 && (this.dirty || this.live || sig !== this._sig)) { this._sig = sig; this.draw(); }
+      requestAnimationFrame(loop);
+    };
     requestAnimationFrame(loop);
   }
 
@@ -92,6 +98,14 @@ export class Viewport {
     this._paintMap();
     if (changedMap) { this.costmaps = { global: null, local: null }; this.trail = []; }
     this.fit();
+  }
+
+  // share another viewport's decoded map (comparison views show the same map)
+  adoptMap(other) {
+    const changed = !this.map || !other.map || this.map.meta.id !== other.map.meta.id;
+    this.map = other.map;
+    if (changed) { this.costmaps = { global: null, local: null }; this.trail = []; }
+    this.dirty = true;
   }
 
   _paintMap() {
@@ -220,7 +234,10 @@ export class Viewport {
     }
     if (this.layers.grid) this._grid();
     this._staticObs();
-    if (this.layers.trail && this.trail.length > 1) this._poly(this.trail, this.col.trail, 2, 0.8);
+    if (this.layers.others && this.opts.others) {
+      for (const o of this.opts.others(this)) if (o.trail.length > 1) this._poly(o.trail, o.color, 2, 0.55);
+    }
+    if (this.layers.trail && this.trail.length > 1) this._poly(this.trail, this.robotColor || this.col.trail, 2, 0.8);
     if (this.layers.plan && this.plans.global) this._poly(this.plans.global, this.col.plan, 2, 0.95);
     if (this.layers.plan && this.plans.local) this._poly(this.plans.local, this.col.lplan, 2.5, 0.95);
     this._peds();
@@ -309,7 +326,7 @@ export class Viewport {
     g.restore(); g.globalAlpha = 1;
   }
 
-  _robot(pose, contact) { this._robotShape(pose, this.col.robot, this.col.ink, 0.9, contact); }
+  _robot(pose, contact) { this._robotShape(pose, this.robotColor || this.col.robot, this.col.ink, 0.9, contact); }
   _ghostRobot(pose) { this._robotShape(pose, this.startBad ? this.col.bad : this.col.robot, this.col.ink, 0.35, !!this.startBad); }
 
   _marker(pose, color, label) {
@@ -383,6 +400,7 @@ export class Viewport {
   }
 
   _down(e) {
+    this.opts.onActivate && this.opts.onActivate(this);
     const [sx, sy] = this._pos(e);
     const [wx, wy] = this.toW(sx, sy);
     this.c.setPointerCapture(e.pointerId);

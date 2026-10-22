@@ -20,7 +20,7 @@ import time
 
 import yaml
 
-from .. import paths, paramgen, robot as robotlib, schema
+from .. import maps, paths, paramgen, robot as robotlib, schema
 from . import scenarios as scenlib, stats
 
 BENCH_DOMAIN, TUNE_DOMAIN = 150, 170
@@ -65,8 +65,7 @@ def build_episodes(spec, robots):
     eps = []
     if spec.get('source', 'bundled') == 'bundled':
         for mid in spec['maps']:
-            f = paths.data('scenarios', mid + '.json')
-            pool = json.load(open(f)) if os.path.exists(f) else []
+            pool = maps.scenarios(mid)
             by = {c: [e for e in pool if e['category'] == c] for c in cats}
             picked, i = [], 0
             while len(picked) < per and any(by.values()):

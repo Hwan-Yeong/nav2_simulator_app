@@ -13,7 +13,7 @@ import yaml
 from . import paths, paramgen, robot as robotlib
 
 LAUNCH = os.path.join(paths.PKG, 'launch', 'nav_sim.launch.py')
-PGID_FILE = paths.user('sessions', 'current', 'stack.pgid')
+MAX_SLOTS = 4   # live sessions that can run side by side (ROS_DOMAIN_ID base .. base+3)
 
 
 def _die_with_parent():
@@ -26,15 +26,21 @@ def _die_with_parent():
 
 
 def kill_stale():
-    """Stop a session left over from a previous server run (its process group id is recorded on start)."""
+    """Stop sessions left over from a previous server run (each records its process group id on start)."""
+    d = paths.user('sessions')
+    files = [os.path.join(d, s, 'stack.pgid') for s in (os.listdir(d) if os.path.isdir(d) else [])]
+    return sum(_kill_pgid_file(f) for f in files if os.path.exists(f)) > 0
+
+
+def _kill_pgid_file(pgid_file):
     try:
-        pgid = int(open(PGID_FILE).read().strip())
+        pgid = int(open(pgid_file).read().strip())
     except (OSError, ValueError):
         return False
     try:
         os.killpg(pgid, signal.SIGINT)
     except ProcessLookupError:
-        os.remove(PGID_FILE)
+        os.remove(pgid_file)
         return False
     for _ in range(50):
         try:
@@ -47,13 +53,17 @@ def kill_stale():
             os.killpg(pgid, signal.SIGKILL)
         except ProcessLookupError:
             pass
-    os.remove(PGID_FILE)
+    os.remove(pgid_file)
     return True
 
 
 class Stack:
-    def __init__(self, env):
+    """One live session. name selects its session directory (sessions/<name>/: params, robot, pgid)."""
+
+    def __init__(self, env, name='slot0'):
         self.env = env
+        self.sdir = paths.user('sessions', name)
+        self.pgid_file = os.path.join(self.sdir, 'stack.pgid')
         self.proc = None
         self.lock = threading.Lock()
         self.log = collections.deque(maxlen=2000)
@@ -70,7 +80,7 @@ class Stack:
         """Generate params and (re)launch. Returns warnings from parameter generation."""
         self.status, self.message, self.started_at = 'starting', '이전 세션 정리 중', time.time()
         self.stop(keep_status=True)
-        sdir = paths.user('sessions', 'current')
+        sdir = self.sdir
         os.makedirs(sdir, exist_ok=True)
         R = robotlib.normalize(robot_profile)
         doc, warn = paramgen.generate(stack_id, R, overrides)
@@ -92,7 +102,7 @@ class Stack:
                                 params_file=params, warnings=warn)
             self.proc = subprocess.Popen(cmd, env=self.env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                          preexec_fn=_die_with_parent, text=True, bufsize=1)
-            with open(PGID_FILE, 'w') as f:
+            with open(self.pgid_file, 'w') as f:
                 f.write(str(self.proc.pid))
             self.status, self.message, self.started_at = 'starting', 'Nav2 시작 중', time.time()
         self._reader = threading.Thread(target=self._read, args=(self.proc,), daemon=True)
@@ -147,7 +157,7 @@ class Stack:
         except Exception:
             pass
         try:
-            os.remove(PGID_FILE)
+            os.remove(self.pgid_file)
         except OSError:
             pass
 

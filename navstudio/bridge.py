@@ -1,4 +1,8 @@
-"""rclpy bridge between the web server and the running simulation / Nav2 stack (runs in its own thread)."""
+"""rclpy bridge between the web server and one running simulation / Nav2 stack (runs in its own thread).
+
+Each live slot has its own ROS domain; a bridge owns an rclpy Context bound to that domain, so one server process can
+talk to several sessions at once.
+"""
 import base64
 import collections
 import json
@@ -18,6 +22,7 @@ from nav2_msgs.srv import ClearEntireCostmap
 from nav_msgs.msg import OccupancyGrid, Path
 from rcl_interfaces.msg import Log
 from std_msgs.msg import String
+from std_srvs.srv import Trigger
 
 LEVEL = {10: 'DEBUG', 20: 'INFO', 30: 'WARN', 40: 'ERROR', 50: 'FATAL'}
 STATUS = {GoalStatus.STATUS_SUCCEEDED: 'succeeded', GoalStatus.STATUS_ABORTED: 'aborted',
@@ -29,8 +34,8 @@ def _path_pts(msg, step=1):
 
 
 class Bridge(Node):
-    def __init__(self):
-        super().__init__('navstudio_bridge')
+    def __init__(self, context=None):
+        super().__init__('navstudio_bridge', context=context)
         rel = QoSProfile(depth=10, reliability=ReliabilityPolicy.RELIABLE)
         latched = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE, durability=DurabilityPolicy.TRANSIENT_LOCAL)
         self.lock = threading.Lock()
@@ -58,6 +63,9 @@ class Bridge(Node):
         self.nav_client = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         self.clr = [self.create_client(ClearEntireCostmap, s) for s in
                     ('/local_costmap/clear_entirely_local_costmap', '/global_costmap/clear_entirely_global_costmap')]
+        self.lm_active = self.create_client(Trigger, '/lifecycle_manager_navigation/is_active')
+        self._active = False
+        self._active_pending = False
 
     # ------------------------------------------------------------ inputs
     def _on_state(self, msg):
@@ -96,6 +104,22 @@ class Bridge(Node):
 
     def nav_ready(self):
         return self.nav_client.server_is_ready()
+
+    def nav_active(self):
+        """True once Nav2's lifecycle manager reports every node active (polled asynchronously, last answer).
+
+        The action server exists from 'configured' on, so it alone does not mean bt_navigator accepts goals."""
+        if not self._active and not self._active_pending and self.lm_active.service_is_ready():
+            self._active_pending = True
+
+            def done(f):
+                self._active_pending = False
+                try:
+                    self._active = bool(f.result().success)
+                except Exception:
+                    pass
+            self.lm_active.call_async(Trigger.Request()).add_done_callback(done)
+        return self._active
 
     def clear_costmaps(self):
         for c in self.clr:
@@ -158,6 +182,7 @@ class Bridge(Node):
                 self.nav.update(status='canceled', result_time=time.time())
 
     def reset_view_state(self):
+        self._active = False
         with self.lock:
             self.sim_state = None
             self.plans = {'global': None, 'local': None}
@@ -173,10 +198,11 @@ class Bridge(Node):
 
 
 class BridgeThread:
-    def __init__(self):
-        rclpy.init()
-        self.node = Bridge()
-        self.exec = MultiThreadedExecutor(num_threads=2)
+    def __init__(self, domain=None):
+        self.ctx = rclpy.Context()
+        rclpy.init(context=self.ctx, domain_id=domain)
+        self.node = Bridge(context=self.ctx)
+        self.exec = MultiThreadedExecutor(num_threads=2, context=self.ctx)
         self.exec.add_node(self.node)
         self.thread = threading.Thread(target=self._spin, daemon=True)
         self.thread.start()
@@ -191,6 +217,6 @@ class BridgeThread:
         try:
             self.exec.shutdown()
             self.node.destroy_node()
-            rclpy.try_shutdown()
+            rclpy.try_shutdown(context=self.ctx)
         except Exception:
             pass

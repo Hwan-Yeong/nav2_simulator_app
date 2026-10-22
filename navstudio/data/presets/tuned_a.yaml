@@ -1,4 +1,4 @@
 name: 튜닝안 A (파라미터만)
-description: nav_tuning 검증 결과. 성공률 동일, 속도 +14%, 이격 증가, 각 저크 +25%. 코드 변경 없음.
+description: 운영 설정 검증 분석 결과. 성공률 동일, 속도 +14%, 이격 증가, 각 저크 +25%. 코드 변경 없음.
 stacks: [prod]
 values: {eb_w_trav: 16.0, infl_scale: 6.0, infl_radius: 0.40, dwb_base_obstacle: 0.4, dwb_path_align: 19.0, dwb_path_dist: 22.0, dwb_sim_time: 1.3}

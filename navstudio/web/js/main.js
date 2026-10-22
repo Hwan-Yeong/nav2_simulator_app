@@ -1,6 +1,6 @@
 // Nav Studio bootstrap: catalog, top bar, workspaces, live connection.
 import { api, Live } from './api.js';
-import { S, on, emit, selKey, isDirty, mapName, stackOf } from './state.js';
+import { S, on, emit, isDirty, isDirtySlot, visibleSlots, mapName, stackOf } from './state.js';
 import { h, icon, toast, initTheme, persist } from './ui.js';
 import * as sim from './sim.js';
 
@@ -13,34 +13,56 @@ async function loadCatalog() {
   Object.assign(S, { info, maps, robots, stacks, presets });
   if (!maps.find((m) => m.id === S.sel.map)) S.sel.map = maps[0].id;
   if (!robots.find((r) => r.id === S.sel.robotId)) S.sel.robotId = 'everybot';
-  if (!stacks.find((s) => s.id === S.sel.stack)) S.sel.stack = 'prod';
+  for (const sl of S.slots) {
+    if (!stacks.find((s) => s.id === sl.cfg.stack)) sl.cfg.stack = 'prod';
+    if (sl.cfg.preset && !presets.find((p) => p.id === sl.cfg.preset)) sl.cfg.preset = null;
+  }
+  $('appVersion').textContent = 'v' + info.version;
+}
+
+// overall state of the visible slots: stopped | starting | ready | partial | error
+function topState() {
+  const vis = visibleSlots();
+  const n = (st) => vis.filter((s) => s.stack.status === st).length;
+  if (vis.length === 1) return { st: vis[0].stack.status, ready: n('ready'), total: 1, starting: n('starting'), error: n('error') };
+  const st = n('starting') ? 'starting' : n('error') ? 'error' : n('ready') === vis.length ? 'ready' : n('ready') ? 'partial' : 'stopped';
+  return { st, ready: n('ready'), total: vis.length, starting: n('starting'), error: n('error') };
 }
 
 function renderTop() {
-  const st = S.stack.status;
+  const multi = S.nSlots > 1;
+  const t = topState();
   const pill = $('stackPill');
-  pill.dataset.state = st;
-  pill.querySelector('b').textContent = { stopped: '정지됨', starting: '시작 중', ready: '실행 중', error: '오류' }[st] || st;
-  pill.title = S.stack.message || '';
+  pill.dataset.state = t.st === 'partial' ? 'ready' : t.st;
+  pill.querySelector('b').textContent = !multi ? ({ stopped: '정지됨', starting: '시작 중', ready: '실행 중', error: '오류' }[t.st] || t.st)
+    : { stopped: '정지됨', starting: `시작 중 ${t.ready}/${t.total}`, ready: `${t.total}개 실행 중`, partial: `${t.ready}/${t.total} 실행 중`, error: `오류 ${t.error}개` }[t.st];
+  pill.title = multi ? visibleSlots().map((s) => `${'ABCD'[s.idx]}: ${s.stack.message || s.stack.status}`).join('\n') : (S.stack.message || '');
   const b = $('btnStart');
-  const dirty = isDirty();
-  b.disabled = st === 'starting';
+  const dirty = multi ? visibleSlots().some((s) => isDirtySlot(s.idx)) : isDirty();
+  b.disabled = t.st === 'starting';
   let html;
-  if (st === 'starting') html = '<span class="spin"></span><span>시작 중</span>';
-  else if ((st === 'ready' || st === 'error') && dirty) html = icon('restart') + '<span>변경 적용 (재시작)</span>';
-  else if (st === 'ready') html = icon('restart') + '<span>재시작</span>';
+  if (t.st === 'starting') html = '<span class="spin"></span><span>시작 중</span>';
+  else if (multi) html = t.ready < t.total ? icon('play') + '<span>모두 시작</span>' : dirty ? icon('restart') + '<span>변경 적용 (재시작)</span>' : icon('restart') + '<span>모두 재시작</span>';
+  else if ((t.st === 'ready' || t.st === 'error') && dirty) html = icon('restart') + '<span>변경 적용 (재시작)</span>';
+  else if (t.st === 'ready') html = icon('restart') + '<span>재시작</span>';
   else html = icon('play') + '<span>시뮬레이션 시작</span>';
   // replace only on change: re-rendering between mousedown and mouseup would swallow the click
   if (b.dataset.html !== html) { b.innerHTML = html; b.dataset.html = html; }
-  b.classList.toggle('primary', st !== 'ready' || dirty);
-  $('btnStop').hidden = st === 'stopped';
+  b.classList.toggle('primary', t.st !== 'ready' || dirty);
+  b.title = multi ? '꺼져 있거나 설정이 바뀐 슬롯을 시작합니다 (모두 실행 중이면 모두 재시작)' : '';
+  $('btnStop').hidden = S.slots.every((s) => s.stack.status === 'stopped');
+  $('btnStop').title = multi ? '모든 슬롯 끄기' : '시뮬레이션 종료';
   const robotName = S.sel.robot ? S.sel.robot.name : ((S.robots.find((r) => r.id === S.sel.robotId) || {}).name || S.sel.robotId);
   const stack = stackOf(S.sel.stack);
   const nv = Object.keys(S.sel.values).length + ((S.sel.raw || '').trim() ? 1 : 0);
+  const sig = JSON.stringify([S.sel.map, robotName, S.sel.stack, nv, S.nSlots, S.maps.length]);
+  if ($('sessionChips').dataset.sig === sig) return;
+  $('sessionChips').dataset.sig = sig;
   $('sessionChips').replaceChildren(
     h('span', { class: 'chip' }, '맵 ', h('b', { text: mapName(S.sel.map) })),
     h('span', { class: 'chip' }, '로봇 ', h('b', { text: robotName })),
-    h('span', { class: 'chip', title: stack ? stack.name : '' }, '스택 ', h('b', { text: stack ? stack.name.replace(/\s*\(.*\)/, '') : S.sel.stack }), nv ? ` · 변경 ${nv}` : ''));
+    multi ? h('span', { class: 'chip' }, '동시 실행 ', h('b', { text: `${S.nSlots}개` }))
+      : h('span', { class: 'chip', title: stack ? stack.name : '' }, '스택 ', h('b', { text: stack ? stack.name.replace(/\s*\(.*\)/, '') : S.sel.stack }), nv ? ` · 변경 ${nv}` : ''));
 }
 
 function showWorkspace(ws) {
@@ -50,7 +72,7 @@ function showWorkspace(ws) {
   history.replaceState(null, '', '#' + ws);
   const mod = workspaces[ws];
   if (mod && mod.show) mod.show();
-  if (ws === 'sim') sim.viewport().resize();
+  if (ws === 'sim') sim.resizeViews();
 }
 
 async function main() {
@@ -71,7 +93,8 @@ async function main() {
     window.__vp = vp; window.__S = S;
     const pre = h('pre', { id: 'nsdebug', hidden: true });
     document.body.append(pre);
-    setInterval(() => { pre.textContent = JSON.stringify({ applied: S.applied, map: S.sel.map, status: S.stack.status,
+    setInterval(() => { pre.textContent = JSON.stringify({ applied: S.applied, map: S.sel.map, status: S.stack.status, nSlots: S.nSlots, active: S.active,
+      slots: S.slots.slice(0, S.nSlots).map((s) => ({ status: s.stack.status, nav: s.nav && s.nav.status, applied: s.applied !== null, result: s.result && s.result.status })),
       costmaps: Object.fromEntries(Object.entries(vp.costmaps).map(([k, c]) => [k, c ? { w: c.w, h: c.h, canvas: !!c.canvas } : null])),
       live: !!vp.live, mapLoaded: !!vp.map, layers: vp.layers, nav: S.nav && S.nav.status, metrics: S.sim && S.sim.metrics,
       err: window.__err || null }); }, 500);
@@ -84,32 +107,18 @@ async function main() {
     hello: async (m) => {
       if (!first) return;
       first = false;
-      if (m.config) sim.adoptServerConfig(m.config, m.scene);
+      const running = sim.adoptServer(m.slots, m.scene);
       await sim.selectRobot(S.sel.robotId, S.sel.robot);
-      await sim.selectMap(S.sel.map, { keepScene: !!m.config });
+      await sim.selectMap(S.sel.map, { keepScene: running });
       emit('catalog');
       renderTop();
     },
-    tick: (m) => {
-      const prev = S.stack.status;
-      S.stack = S.pendingStart ? { status: 'starting', message: 'Nav2 시작 중' } : m.stack;
-      S.nav = m.nav;
-      if (prev !== m.stack.status) {
-        if (S.stack.status === 'ready') toast('시뮬레이션이 준비되었습니다. 목표 도구로 목적지를 찍으세요.', 'good');
-        if (S.stack.status === 'stopped' && S.applied !== null && prev === 'ready') S.applied = null;
-        emit('stack'); sim.renderRunbar();
-      }
-      const ns = m.nav && m.nav.status;
-      if (ns !== (S._lastNav || null)) { S._lastNav = ns; sim.renderRunbar();
-        if (ns === 'succeeded') toast('목표에 도착했습니다', 'good');
-        if (ns === 'aborted') toast('Nav2 가 주행을 중단했습니다 (Nav2 메시지 확인)', 'bad'); }
-      emit('tick', m);
-    },
+    tick: (m) => { sim.onTick(m); emit('tick', m); },
     plan: (m) => emit('plan', m),
     costmap: (m) => emit('costmap', m),
     log: (m) => emit('log', m),
-    reset: () => emit('reset'),
-    disconnected: () => { S.stack = { status: 'error', message: '서버 연결이 끊겼습니다. 다시 연결 중…' }; renderTop(); },
+    reset: (m) => emit('reset', m),
+    disconnected: () => { for (const s of S.slots) if (s.stack.status !== 'stopped') s.stack = { status: 'error', message: '서버 연결이 끊겼습니다. 다시 연결 중…' }; renderTop(); },
   });
 
   // other workspaces load lazily

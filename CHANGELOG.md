@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-22
+
 ### 추가
 - **동시 실행 비교**: 설정이 다른 시뮬레이션을 2~4개(슬롯 A–D) 나란히 띄웁니다. 맵·로봇·장면은 같이 쓰고, 슬롯마다 스택과 파라미터가 다릅니다.
   - 모두 시작 / 슬롯별 시작·재시작·끄기, 모든 로봇을 출발점에서 같은 순간에 보내는 ‘동시 출발’, 슬롯 하나만 다시 주행
@@ -28,6 +30,8 @@
 - 다른 스택에 해당하는 파라미터 값은 Nav2 설정을 만들 때 빠집니다.
 
 ### 수정
+- 0.1.0 저장소에 플래너·BT 플러그인 C++ 소스(`plugins_src/*/src`)가 빠져 있어 `navstudio build-plugins` 와 Docker 빌드가 실패하던 문제. `scripts/check.py` 가 CMakeLists 에 적힌 소스가 모두 있는지 검사합니다.
+- 자동 튜닝이 시작 직후나 ‘동시 trial’ 2개 이상에서 오류로 멈추던 문제: 진행률 조회가 결과 DB 를 동시에 만들려던 경합(`alembic_version`), 같은 trial 을 두 스레드가 받아 두 번 기록하던 경합(“Cannot tell a COMPLETE trial”)
 - 맵 썸네일·격자 이미지가 같은 id 로 다시 올린 맵에서 예전 그림을 보이던 문제 (캐시 끔)
 
 ## [0.1.0] - 2026-10-22
@@ -46,5 +50,6 @@ nav_tuning 분석 저장소에서 앱만 분리한 첫 버전입니다.
 - 공개 저장소에는 합성 맵 4종만 기본으로 넣습니다. 현장 맵은 맵 올리기로 추가합니다.
 - Docker 는 기본으로 이 PC 에서만 접속됩니다 (`127.0.0.1:8765`).
 
-[Unreleased]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Hwan-Yeong/nav2_simulator_app/releases/tag/v0.1.0

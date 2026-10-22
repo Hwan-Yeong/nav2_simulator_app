@@ -82,7 +82,7 @@ function applyLayout() {
   $('stage').classList.toggle('multi', n > 1);
   document.querySelectorAll('#views .vcell').forEach((c, i) => { c.hidden = i >= n; c.classList.toggle('active', n > 1 && i === S.active); c.style.setProperty('--slot', slotColor(i)); });
   $('addSlot').hidden = n !== 3;
-  vps.forEach((v, i) => { v.robotColor = n > 1 ? slotColor(i) : null; if (i !== S.active) v.follow = false; v.dirty = true; });
+  vps.forEach((v, i) => { v.robotColor = n > 1 ? slotColor(i) : null; v.fitPad = n > 1 ? { x: 10, top: 46, bottom: 10 } : null; if (i !== S.active) v.follow = false; v.dirty = true; });
   renderSlotHeads(true);
   renderEditing();
   renderTelemetry();

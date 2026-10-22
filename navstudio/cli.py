@@ -117,7 +117,7 @@ def cmd_maps(a):
     paths.ensure_user_dirs()
     if a.action == 'list':
         for m in maps.list_maps():
-            print(f"{m['id']:24} {'기본' if m['builtin'] else '내 맵':4} {m['name']}  ({m.get('width_m', '?')} × {m.get('height_m', '?')} m"
+            print(f"{m['id']:24} {('기본 · ' if m['builtin'] else '') + m['group']:8} {m['name']}  ({m.get('width_m', '?')} × {m.get('height_m', '?')} m"
                   f"{', 시나리오 ' + str(m['scenarios']) if m['scenarios'] else ''})")
         return 0
     if a.action == 'import':

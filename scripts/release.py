@@ -33,7 +33,8 @@ def main(new):
     if not body.strip():
         sys.exit('CHANGELOG.md 의 [Unreleased] 가 비어 있습니다. 이번 버전의 변경 사항을 먼저 적으세요.')
     today = datetime.date.today().isoformat()
-    cl = f'{head}## [Unreleased]\n\n## [{new}] - {today}\n{body.rstrip()}\n\n## [{tail}' if tail else f'{head}## [Unreleased]\n\n## [{new}] - {today}\n{body.rstrip()}\n'
+    section = f'## [Unreleased]\n\n## [{new}] - {today}\n\n{body.strip()}\n'
+    cl = f'{head}{section}\n## [{tail}' if tail else f'{head}{section}'
     cl = re.sub(r'^\[Unreleased\]: .*$', f'[Unreleased]: {URL}/compare/v{new}...HEAD\n[{new}]: {URL}/compare/v{old}...v{new}', cl, count=1, flags=re.M)
     open(path('CHANGELOG.md'), 'w').write(cl)
     open(path('navstudio', '__init__.py'), 'w').write(init.replace(f'"{old}"', f'"{new}"'))

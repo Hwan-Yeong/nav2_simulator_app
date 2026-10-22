@@ -193,7 +193,7 @@ PAGES.append('''
 PAGES.append('''
 <section class="page">
   <header class="ph"><span>05</span>파라미터와 설정 세트</header>
-  ''' + shot('params.png', [('setbar', 1, 'bc', True), ('changed', 2, 'tl', True), ('start', 3, 'bl')]) + legend([
+  ''' + shot('params.png', [('setbar', 1, 'tc', True), ('changed', 2, 'tl', True), ('start', 3, 'bl')]) + legend([
     ('설정 세트', '지금 쓰는 세트 이름. 값을 바꾸면 “(수정됨)” 이 붙습니다. 저장 버튼으로 이름 붙여 저장합니다'),
     ('바꾼 항목', '파란 배경과 점으로 표시됩니다. 오른쪽 되돌리기 버튼으로 기본값 복원. 아래 회색 글씨는 실제 Nav2 파라미터 경로'),
     ('변경 적용 (재시작)', '누르면 같은 장면으로 Nav2 를 다시 띄웁니다 (약 4초)'),
@@ -217,9 +217,9 @@ PAGES.append('''
 PAGES.append('''
 <section class="page">
   <header class="ph"><span>06</span>동시 실행 비교</header>
-  <p>설정 여러 개의 거동을 한 화면에서 나란히 봅니다. 맵 · 로봇 · 장면(출발점, 목표, 장애물, 보행자)은 모든 슬롯이 같이 쓰고, 슬롯마다 주행 스택과 파라미터가 다릅니다. 화면 하나하나가 따로 도는 Nav2 입니다.</p>
+  <p>설정 여러 개를 한 화면에서 나란히 돌려 봅니다. 맵 · 로봇 · 장면은 모든 슬롯이 같이 쓰고, 슬롯마다 스택과 파라미터가 다릅니다.</p>
   ''' + shot('sim_compare.png', [('slots', 1, 'tc'), ('head', 2, 'bl', True), ('slotctl', 3, 'bc'), ('slotgo', 4, 'bc'), ('startall', 5, 'bl'),
-                                  ('go', 6, 'tc'), ('compare', 7, 'tl', True), ('editing', 8, 'br')]) + legend([
+                                  ('go', 6, 'tc'), ('compare', 7, 'ml', True), ('editing', 8, 'br')]) + legend([
     ('동시 실행 개수', '1~4. 슬롯 A–D 는 색으로 구분됩니다. 슬롯 하나가 CPU 약 1코어를 씁니다'),
     ('슬롯 머리글', '설정 이름을 누르면 설정 세트·스택 기본값을 고르는 메뉴. 옆은 상태(꺼짐 / 시작 중 / 실행 중 / 변경됨 / 오류)'),
     ('슬롯 시작 · 끄기', '그 슬롯만 시작·재시작(설정을 바꿨으면 변경 적용)·끄기'),
@@ -236,9 +236,8 @@ PAGES.append('''
         <li>맵과 시나리오를 고르고 아래 막대에서 <b>3</b> 을 누릅니다.</li>
         <li>슬롯 머리글의 이름을 눌러 비교할 설정을 고릅니다. 예: A 운영 설정, B MPPI, C Regulated Pure Pursuit.</li>
         <li>상단 <b>모두 시작</b>. 세 슬롯이 ‘실행 중’ 이 되면 목표를 찍거나 <b>동시 출발</b>.</li>
-        <li>다른 슬롯의 궤적이 흐린 색으로 겹쳐 보입니다. 끝나면 비교표를 보고 <b>이 설정들로 벤치마크</b> 로 여러 시나리오에서 확인합니다.</li>
+        <li>다른 슬롯의 궤적이 흐린 색으로 겹쳐 보입니다. 한 번의 주행에는 우연이 섞이므로, 차이가 작으면 <b>이 설정들로 벤치마크</b> 로 여러 시나리오에서 확인합니다.</li>
       </ol>
-      <p class="note">한 번의 주행에는 보행자 타이밍 같은 우연이 섞입니다. 차이가 작으면 벤치마크로 확인하세요.</p>
     </div>
     <div>''' + shot('slot_menu.png', [], '슬롯 머리글 메뉴: 설정 세트, 스택 기본값, 다른 슬롯 설정 복사, 파라미터 직접 편집.', 'shot small') + '''</div>
   </div>
@@ -336,10 +335,10 @@ PAGES.append('''
       </ol>
       <h3>맵 zip 형식</h3>
       ''' + code('''
-site_a/map.yaml        # resolution, origin, image
+site_a/map.yaml         # ROS map_server YAML
 site_a/map.pgm
-site_a/info.json       # 선택: {"name": "...", "group": "현장"}
-site_a/scenarios.json  # 선택: 준비된 시나리오
+site_a/info.json        # 선택: 이름·그룹
+site_a/scenarios.json   # 선택: 시나리오
 site_b/...''') + '''
     </div>
   </div>
@@ -352,7 +351,8 @@ site_b/...''') + '''
       ''' + code('''
 navstudio maps list
 navstudio maps import site_maps.zip
-navstudio maps import office.yaml office.pgm --name "3층 사무실"
+navstudio maps import office.yaml office.pgm \
+          --name "3층 사무실"
 navstudio maps export site_a -o site_a.zip
 navstudio maps remove site_a''') + '''
     </div>
@@ -458,6 +458,8 @@ figcaption { font-size: 8pt; color: var(--muted); margin-top: 1.2mm; }
 .cover-grid b { font-size: 10.5pt; }
 .cover-grid span { font-size: 8.3pt; color: var(--muted); }
 .shot.small .frame { border-radius: 3pt; }
+.cols .shot.small .frame { max-height: 64mm; }
+.cols .shot.small .frame img { max-height: 64mm; width: auto; max-width: 100%; display: block; margin: 0 auto; }
 '''
 
 

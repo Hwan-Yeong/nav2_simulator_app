@@ -30,6 +30,22 @@ def state(pg):
     return json.loads(pg.evaluate("document.getElementById('nsdebug').textContent || '{}'"))
 
 
+# small but important colours (slot A–D, accent, goal, good/bad) must survive the 128-colour GIF palette
+KEY_COLOURS = ['#1c7ed6', '#e8940a', '#2f9e44', '#ae3ec9', '#0d7ea6', '#d6336c', '#1d8550', '#c23f2b', '#e0f0f6', '#e1f3e8']
+
+
+def quantize(frames, colors=128):
+    w, h = frames[0].size
+    sample = Image.new('RGB', (w, h * 3 + 40), 'white')
+    for k, f in enumerate((frames[0], frames[len(frames) // 2], frames[-1])):
+        sample.paste(f, (0, h * k))
+    step = w // len(KEY_COLOURS)
+    for k, c in enumerate(KEY_COLOURS * 1):
+        sample.paste(Image.new('RGB', (step, 40), c), (k * step, h * 3))
+    pal = sample.quantize(colors=colors, method=Image.MEDIANCUT)
+    return [f.quantize(palette=pal, dither=Image.NONE) for f in frames]
+
+
 def main(eid='synth_clutter/dynamic/001', speedup=2.0):
     mid = eid.split('/')[0]
     ep = next(e for e in api('GET', f'/api/scenarios/{mid}') if e['id'] == eid)
@@ -68,8 +84,7 @@ def main(eid='synth_clutter/dynamic/001', speedup=2.0):
         results = [s.get('result') for s in state(pg)['slots']]
         api('POST', '/api/session/stop', {})
         br.close()
-    pal = frames[len(frames) // 2].quantize(colors=96, method=Image.MEDIANCUT)
-    q = [f.quantize(palette=pal, dither=Image.NONE) for f in frames]
+    q = quantize(frames)
     path = os.path.join(OUT, 'demo.gif')
     q[0].save(path, save_all=True, append_images=q[1:], duration=int(1000 / FPS / speedup), loop=0, optimize=True)
     print(path, len(frames), 'frames', round(time.time() - t0), 's', results, os.path.getsize(path) // 1024, 'KB')

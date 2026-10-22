@@ -142,9 +142,9 @@ python3 -m venv ~/.navstudio-venv
 | [docs/DESIGN.md](docs/DESIGN.md) | 설계 결정과 이유 |
 
 <a href="docs/guide/Nav_Studio_User_Guide.pdf"><img src="docs/guide/pages/page_01.png" width="24%"></a>
-<a href="docs/guide/Nav_Studio_User_Guide.pdf"><img src="docs/guide/pages/page_03.png" width="24%"></a>
-<a href="docs/guide/Nav_Studio_User_Guide.pdf"><img src="docs/guide/pages/page_06.png" width="24%"></a>
-<a href="docs/guide/Nav_Studio_User_Guide.pdf"><img src="docs/guide/pages/page_08.png" width="24%"></a>
+<a href="docs/guide/Nav_Studio_User_Guide.pdf"><img src="docs/guide/pages/page_04.png" width="24%"></a>
+<a href="docs/guide/Nav_Studio_User_Guide.pdf"><img src="docs/guide/pages/page_07.png" width="24%"></a>
+<a href="docs/guide/Nav_Studio_User_Guide.pdf"><img src="docs/guide/pages/page_09.png" width="24%"></a>
 
 ## 저장소 구성
 

@@ -254,6 +254,7 @@ class TuneRun(BenchRun):
         super().__init__(spec, env, rid or _now_id('t'))
         self.trials = []
         self.study = None
+        self._lock = threading.Lock()   # guards the study: ask/tell from trial threads, reads from the API
 
     def _run(self):
         try:
@@ -285,7 +286,7 @@ class TuneRun(BenchRun):
             space = self.spec['params']
             by_id = {p['id']: p for p in schema.load()['params']}
             free_slots = list(range(parallel))
-            lock = threading.Lock()
+            lock = self._lock
             self.active = {}
 
             def objective(trial):
@@ -337,7 +338,31 @@ class TuneRun(BenchRun):
             self.status, self.message = 'running', '실행 중'
             self.save()
             optuna.logging.set_verbosity(optuna.logging.WARNING)
-            self.study.optimize(objective, n_trials=n_trials, n_jobs=parallel, catch=(Exception,))
+            # ask/tell under one lock: study.optimize(n_jobs>1) on SQLite can hand the same queued trial to two threads
+            # (then fails with "Cannot tell a COMPLETE trial")
+            asked = [0]
+
+            def run_trials():
+                while True:
+                    with lock:
+                        if self.status == 'canceled' or asked[0] >= n_trials:
+                            return
+                        asked[0] += 1
+                        trial = self.study.ask()
+                    try:
+                        value, state = objective(trial), optuna.trial.TrialState.COMPLETE
+                    except optuna.TrialPruned:
+                        value, state = None, optuna.trial.TrialState.PRUNED
+                    except Exception as e:
+                        value, state = None, optuna.trial.TrialState.FAIL
+                        self.warnings.append(f'trial {trial.number}: {e}')
+                    with lock:
+                        self.study.tell(trial, value, state=state)
+            ths = [threading.Thread(target=run_trials, daemon=True) for _ in range(parallel)]
+            for t in ths:
+                t.start()
+            for t in ths:
+                t.join()
             self.status = 'canceled' if self.status == 'canceled' else 'done'
             self.message = '취소됨' if self.status == 'canceled' else '완료'
         except Exception as e:
@@ -347,8 +372,6 @@ class TuneRun(BenchRun):
 
     def cancel(self):
         self.status, self.message = 'canceled', '취소 중'
-        if self.study is not None:
-            self.study.stop()
         for lanes in list(getattr(self, 'active', {}).values()):
             lanes.cancel()
 
@@ -357,13 +380,20 @@ class TuneRun(BenchRun):
         return dict(done=sum(1 for x in t if x['state'] in ('COMPLETE', 'PRUNED', 'FAIL')), total=self.total)
 
     def trial_list(self):
+        db = os.path.join(self.dir, 'optuna.db')
         try:
             import optuna
-            st = self.study or optuna.load_study(study_name=self.id, storage=f"sqlite:///{os.path.join(self.dir, 'optuna.db')}")
+            if self.study is not None:
+                with self._lock:
+                    trials = self.study.get_trials(deepcopy=True)
+            elif self.status in ('preparing', 'running') or not os.path.exists(db):
+                return []   # the run is creating the storage: opening it now as well races on its schema tables
+            else:
+                trials = optuna.load_study(study_name=self.id, storage=f'sqlite:///{db}').get_trials(deepcopy=False)
         except Exception:
             return []
         out = []
-        for t in st.get_trials(deepcopy=False):
+        for t in trials:
             out.append(dict(number=t.number, state=t.state.name, value=t.value, params=t.params,
                             attrs={k: v for k, v in t.user_attrs.items() if k != 'values'}, values=t.user_attrs.get('values'),
                             duration=(t.datetime_complete - t.datetime_start).total_seconds() if t.datetime_complete and t.datetime_start else None))

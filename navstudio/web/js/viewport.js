@@ -199,9 +199,12 @@ export class Viewport {
     if (!isFinite(x0)) { x0 = 0; y0 = 0; x1 = raw.width; y1 = raw.height; }
     const wx0 = m.origin[0] + x0 * m.resolution, wx1 = m.origin[0] + x1 * m.resolution;
     const wy1 = m.origin[1] + (raw.height - y0) * m.resolution, wy0 = m.origin[1] + (raw.height - y1) * m.resolution;
-    this.view.cx = (wx0 + wx1) / 2; this.view.cy = (wy0 + wy1) / 2;
-    this.view.s = Math.min((this.W - 40) / Math.max(wx1 - wx0, 1), (this.H - 120) / Math.max(wy1 - wy0, 1));
+    // fitPad: screen margins kept free of map (floating bars / slot header); the map is centred in what is left
+    const pad = this.fitPad || { x: 20, top: 60, bottom: 60 };
+    this.view.s = Math.min((this.W - 2 * pad.x) / Math.max(wx1 - wx0, 1), (this.H - pad.top - pad.bottom) / Math.max(wy1 - wy0, 1));
     this.view.s = Math.max(4, Math.min(this.view.s, 400));
+    this.view.cx = (wx0 + wx1) / 2;
+    this.view.cy = (wy0 + wy1) / 2 + (pad.top - pad.bottom) / 2 / this.view.s;
     this.dirty = true;
   }
 

@@ -56,7 +56,9 @@ export function h(tag, attrs = {}, ...kids) {
     else if (k === 'html') e.innerHTML = v;
     else if (k === 'text') e.textContent = v;
     else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
-    else if (k === 'style' && typeof v === 'object') Object.assign(e.style, v);
+    else if (k === 'style' && typeof v === 'object') {
+      for (const [sk, sv] of Object.entries(v)) { if (sk.startsWith('--')) e.style.setProperty(sk, sv); else e.style[sk] = sv; }
+    }
     else if (v === true) e.setAttribute(k, '');
     else e.setAttribute(k, v);
   }

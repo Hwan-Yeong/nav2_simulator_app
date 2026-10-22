@@ -31,7 +31,7 @@ def main():
         pg.click('.seg.slots button[data-n="3"]')
         wait(pg, lambda d: d.get('nSlots') == 3, 5, 'three views')
         pick(pg, 0, '운영 설정')
-        pick(pg, 1, '튜닝안 A')
+        pick(pg, 1, '튜닝안 A (파라미터만)')
         pick(pg, 2, 'Regulated Pure Pursuit')
         names = [pg.inner_text(f'#vhead{i} .cfgname') for i in range(3)]
         assert '튜닝안 A' in names[1] and 'Regulated' in names[2], names

@@ -58,3 +58,28 @@ def test_params_preview_and_schema(client):
     assert r.status_code == 200 and 'max_vel_x: 0.31' in r.json()['yaml']
     s = client.post('/api/params/schema', json={'stack': 'mppi'}).json()
     assert s['params'] and not any(p['id'].startswith('dwb_') for p in s['params'])
+
+
+def test_sensor_library_and_types(client):
+    from navstudio import sensortypes
+    t = client.get('/api/sensor-types').json()
+    assert {'lidar2d', 'tof', 'ultrasonic', 'depth'} <= {x['type'] for x in t['types']} and t['dir'].endswith('sensor_types')
+    assert next(x for x in t['types'] if x['type'] == 'tof')['fov'] == ['fov_h_deg', 'fov_v_deg']
+    r = client.post('/api/sensors', json={'name': '앞 ToF', 'type': 'tof', 'zones_x': 4, 'zones_y': 4})
+    assert r.status_code == 200 and r.json()['zones_x'] == 4
+    mid = r.json()['id']
+    assert client.put(f'/api/sensors/{mid}', json={'name': '앞 ToF', 'type': 'tof', 'zones_x': 2, 'zones_y': 2}).json()['zones_x'] == 2
+    assert client.put('/api/sensors/tof_8x8', json={'name': 'x', 'type': 'tof'}).status_code == 403
+    assert client.post('/api/sensors', json={'name': 'x', 'type': 'tof', 'fov_h_deg': 500}).status_code == 400
+    m = client.post('/api/sensors/mount', json={'model': 'tof_8x8', 'name': 'front_tof', 'x': 0.2}).json()
+    assert m['model'] == 'tof_8x8' and m['x'] == 0.2 and m['pitch_deg'] == 25
+    assert client.post('/api/sensors/mount', json={'model': 'nope', 'name': 'a'}).status_code == 404
+    assert client.delete(f'/api/sensors/{mid}').status_code == 200 and client.delete('/api/sensors/tof_8x8').status_code == 404
+    path = client.post('/api/sensor-types/template', json={'name': 'Bumper IR'}).json()['path']
+    try:
+        assert path.endswith('bumper_ir.py')
+        types = client.post('/api/sensor-types/reload').json()
+        assert 'bumper_ir' in {x['type'] for x in types['types']} and not types['errors']
+    finally:
+        os.remove(path)
+        sensortypes.reload()

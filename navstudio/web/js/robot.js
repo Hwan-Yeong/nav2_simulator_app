@@ -175,6 +175,11 @@ async function addSensor(model) {
   } catch (e) { toast(e.message, 'bad'); }
 }
 
+// highlight the selected sensor card without rebuilding the form (a rebuild between mousedown and mouseup eats clicks)
+function markSel() {
+  document.querySelectorAll('#robotForm .sensor').forEach((c, k) => c.classList.toggle('sel', k === selSensor));
+}
+
 function mirrored(sn) {
   const m = JSON.parse(JSON.stringify(sn));
   m.y = -m.y; m.yaw_deg = -m.yaw_deg; m.roll_deg = -(m.roll_deg || 0);
@@ -198,7 +203,7 @@ function sensorCard(sn, i) {
     'sep',
     { label: '삭제', icon: 'trash', onclick: () => { R.sensors.splice(i, 1); selSensor = -1; changed(true); } },
   ]);
-  return h('div', { class: 'sensor' + (open ? ' sel' : '') + (sn.enabled === false ? ' off' : ''), onpointerdown: () => { if (selSensor !== i) { selSensor = i; cad.draw(); } } },
+  return h('div', { class: 'sensor' + (open ? ' sel' : '') + (sn.enabled === false ? ' off' : ''), onpointerdown: () => { if (selSensor !== i) { selSensor = i; markSel(); cad.draw(); } } },
     h('header', {},
       h('i', { class: 'swatch', style: { background: sn.color || '#888' } }),
       h('input', { type: 'text', value: sn.name, 'aria-label': '센서 이름', style: { width: '110px' }, oninput: (e) => { sn.name = e.target.value.replace(/[^a-zA-Z0-9_]/g, '_'); changed(); } }),
@@ -436,6 +441,7 @@ class Cad {
       this.label(sn.name, sx + 9, sy - 8);
       g.globalAlpha = 1;
     }
+    this.flushLabels();
     if (this.dims) this.dimensions(poly);
   }
   fanR(s) {
@@ -447,12 +453,22 @@ class Cad {
   // sensor name next to a point, moved down a line while it would overlap one already drawn
   label(text, x, y, color = null) {
     const g = this.g;
-    g.font = color ? '11px ui-monospace, monospace' : '600 11px var(--f-ui), sans-serif';
+    const font = color ? '11px ui-monospace, monospace' : '600 11px sans-serif';
+    g.font = font;
     const w = g.measureText(text).width;
     let ty = y;
     for (let k = 0; k < 12 && this.labels.some((r) => x < r[0] + r[2] && x + w > r[0] && Math.abs(ty - r[1]) < 13); k++) ty += 13;
-    this.labels.push([x, ty, w]);
-    g.fillStyle = color || this.k.ink; g.fillText(text, x, ty);
+    this.labels.push([x, ty, w, text, font, color || this.k.ink]);
+  }
+  // names go on top of every sensor mark, with a halo so dots and fans under them do not hide them
+  flushLabels() {
+    const g = this.g;
+    for (const [x, y, , text, font, color] of this.labels) {
+      g.font = font; g.lineJoin = 'round';
+      g.strokeStyle = this.k.bg; g.lineWidth = 3; g.strokeText(text, x, y);
+      g.fillStyle = color; g.fillText(text, x, y);
+    }
+    this.labels = [];
   }
   drawSide() {
     const g = this.g, R0 = this.robot;
@@ -498,6 +514,7 @@ class Cad {
       this.label(`${sn.name}  z ${sn.z.toFixed(3)}`, sx + 8, sy - 8);
       g.globalAlpha = 1;
     }
+    this.flushLabels();
   }
   handle(x, y, hot) {
     const g = this.g, [sx, sy] = this.S(x, y);
@@ -554,7 +571,7 @@ class Cad {
     if (hit) {
       this.drag = hit;
       if (hit.kind === 'v' && this.mirror) this.drag.mate = this.mate(hit.i);
-      if (hit.i !== undefined && ['s', 'yaw', 'sz', 'pitch'].includes(hit.kind)) selSensor = hit.i;
+      if (hit.i !== undefined && ['s', 'yaw', 'sz', 'pitch'].includes(hit.kind)) { selSensor = hit.i; markSel(); }
     }
     else this.drag = { kind: 'pan', sx, sy, cx: this.cx, cy: this.cy };
   }

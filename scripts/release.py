@@ -45,7 +45,7 @@ def main(new):
   1. UI 가 바뀌었으면 스크린샷·데모 다시 찍기:  python3 scripts/capture_guide.py all && python3 scripts/capture_demo.py
   2. 사용 가이드 다시 만들기:                  python3 docs/guide/build_guide.py
   3. 검사·테스트:                              python3 scripts/check.py --release && python3 -m pytest
-                                               python3 tests/e2e/single_flow.py && python3 tests/e2e/compare_flow.py && python3 tests/e2e/manage_flow.py
+                                               python3 tests/e2e/single_flow.py && python3 tests/e2e/compare_flow.py && python3 tests/e2e/manage_flow.py && python3 tests/e2e/sensor_flow.py
   4. git commit -am "Release {new}" && git tag -a v{new} -m "Nav Studio {new}" && git push --follow-tags''')
 
 

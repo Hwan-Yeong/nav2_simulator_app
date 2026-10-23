@@ -465,7 +465,7 @@ function heightFields(obj, k0, k1, onchange = () => {}) {
 // select tool: edit the height / depth of the picked obstacle
 function showSelected(hit) {
   const o = $('toolOpts');
-  if (vps[0].tool !== 'select' && !(hit && ['box', 'cliff'].includes(vps[0].tool))) return;
+  if (vps[0].tool !== 'select') return;
   const ob = hit && hit.kind === 'static' ? S.scene.static_obs[hit.idx] : null;
   if (!ob || ob.g) { if (vps[0].tool === 'select') setTool('select'); return; }
   const done = () => { for (const k of ['z0', 'z1']) if (k in ob && ((k === 'z0' && ob.z0 <= 0.0005) || (k === 'z1' && Math.abs(ob.z1 - 1.0) < 0.0005))) delete ob[k]; sceneEdited(); };

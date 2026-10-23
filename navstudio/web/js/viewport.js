@@ -576,7 +576,6 @@ export class Viewport {
         const r = { x0: r3(Math.min(d.x0, d.x1)), y0: r3(Math.min(d.y0, d.y1)), x1: r3(Math.max(d.x0, d.x1)), y1: r3(Math.max(d.y0, d.y1)) };
         const o = d.cliff ? { type: 'cliff', ...r, depth: this.toolOpts.cliffDepth } : { type: 'rect', ...r, ...heights(this.toolOpts.boxZ0, this.toolOpts.boxZ1) };
         this.scene.static_obs.push(o);
-        if (this.opts.onSelect) { this.sel = { kind: 'static', idx: this.scene.static_obs.length - 1 }; this.opts.onSelect(this, this.sel); }
         this._changed();
       }
     }

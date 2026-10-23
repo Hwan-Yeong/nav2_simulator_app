@@ -25,14 +25,16 @@ from nav2_msgs.srv import ClearEntireCostmap
 from nav_msgs.msg import Path
 from std_msgs.msg import String
 
-from navstudio import stack as stacklib
+import yaml
+
+from navstudio import robot as robotlib, stack as stacklib
 from navstudio.stack import LAUNCH
 
 NAV_PROCS = ('controller_server', 'planner_server', 'bt_navigator', 'smoother_server', 'behavior_server',
              'velocity_smoother', 'map_server')
 METRIC_KEYS = ('duration', 'path_len', 'min_clear', 'collisions', 'collision_time', 'near_time', 'rot_abs',
                'lin_jerk_sq', 'ang_jerk_sq', 'w_sign_flips', 'v_sign_flips', 'stopped_time', 'max_v', 'max_w',
-               'reverse_dist')
+               'reverse_dist', 'falls')
 
 
 class Client(Node):
@@ -97,9 +99,10 @@ def nav_pids(root):
 class Launch:
     def __init__(self, cfg_dir, map_yaml, start, log):
         sp = '[' + ', '.join(f'{float(v):.4f}' for v in start) + ']'
+        R = robotlib.normalize(yaml.safe_load(open(f'{cfg_dir}/robot.yaml')))
         self.cmd = ['ros2', 'launch', LAUNCH, f'params_file:={cfg_dir}/params.yaml', f'map:={map_yaml}',
                     f'robot_file:={cfg_dir}/robot.yaml', f'sim_params:={cfg_dir}/sim.yaml', f'start_pose:={sp}',
-                    'log_level:=warn', f'python:={sys.executable}']
+                    'log_level:=warn', f'python:={sys.executable}', f'perception:={str(robotlib.perception_node(R)).lower()}']
         self.log = log
         self.proc = None
 

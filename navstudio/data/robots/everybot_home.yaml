@@ -1,0 +1,25 @@
+name: Everybot 홈 로봇 (듀얼 라이다 · ToF · Depth)
+description: 키 60 cm 원형 홈 로봇. 앞뒤 240° 라이다를 /scan 하나로 병합, 바닥 쪽 멀티존 ToF 2개(8×8 중 16존)로 낮은 장애물·단차, 상단 1D ToF 와 depth 카메라로 떠 있는 장애물을 봅니다.
+drive: diff
+footprint: {type: circle, radius: 0.175}
+footprint_padding: 0.015
+body: {height: 0.6, color: '#e9ecef'}
+wheels: {track: 0.244, radius: 0.05, wheelbase: 0.0, max_steer_deg: 0.0}
+limits: {vx_max: 0.5, vx_min: -0.2, vy_max: 0.0, wz_max: 1.5, ax_max: 0.6, ay_max: 0.6, az_max: 2.5}
+actuator: {tau: 0.08, slip_lin: 0.02, slip_ang: 0.03}
+climb_height: 0.015
+sensors:
+  - {name: front, model: lidar_240, type: lidar2d, x: 0.1475, y: 0.0, z: 0.125, yaw_deg: 0, fov_deg: 240, beams: 480, range_min: 0.1, range_max: 12.0, hz: 10, noise: 0.01}
+  - {name: back, model: lidar_240, type: lidar2d, x: -0.1475, y: 0.0, z: 0.125, yaw_deg: 180, fov_deg: 240, beams: 480, range_min: 0.1, range_max: 12.0, hz: 10, noise: 0.01}
+  - {name: mtof_left, model: tof_8x8, type: tof, x: 0.14316, y: 0.075446, z: 0.08, roll_deg: 0, pitch_deg: -5, yaw_deg: 15,
+     zones_x: 8, zones_y: 8, fov_h_deg: 45, fov_v_deg: 45, rays_per_zone: 2, range_min: 0.02, range_max: 4.0, hz: 15, noise: 0.005, noise_rel: 0.01,
+     zone_mask: [0, 3, 6, 17, 20, 23, 28, 31, 44, 47, 49, 52, 55, 57, 60, 63], color: '#c2255c'}
+  - {name: mtof_right, model: tof_8x8, type: tof, x: 0.14316, y: -0.075446, z: 0.08, roll_deg: 0, pitch_deg: -5, yaw_deg: -15,
+     zones_x: 8, zones_y: 8, fov_h_deg: 45, fov_v_deg: 45, rays_per_zone: 2, range_min: 0.02, range_max: 4.0, hz: 15, noise: 0.005, noise_rel: 0.01,
+     zone_mask: [1, 4, 7, 16, 19, 22, 24, 27, 40, 43, 48, 51, 54, 56, 59, 62], color: '#c2255c'}
+  - {name: tof_top, model: tof_1d, type: tof, x: 0.0942, y: 0.0, z: 0.615, roll_deg: 0, pitch_deg: -39, yaw_deg: 0,
+     zones_x: 1, zones_y: 1, fov_h_deg: 27, fov_v_deg: 27, rays_per_zone: 5, range_min: 0.04, range_max: 4.0, hz: 30, noise: 0.005, noise_rel: 0.01, color: '#e8590c'}
+  - {name: depth, model: depth_camera, type: depth, x: 0.177, y: 0.0, z: 0.31, roll_deg: 0, pitch_deg: 15, yaw_deg: 0,
+     width: 64, height: 48, fov_h_deg: 87, fov_v_deg: 58, range_min: 0.16, range_max: 2.0, hz: 10, noise: 0.002, noise_quad: 0.004, color: '#1971c2'}
+scan_merge: {enabled: true, sources: [front, back], frame: base_scan, z: 0.125, angle_increment_deg: 0.9, range_min: 0.1, range_max: 12.0}
+perception: {mode: rules}

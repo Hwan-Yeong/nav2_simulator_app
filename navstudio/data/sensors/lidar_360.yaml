@@ -1,0 +1,10 @@
+name: 2D 라이다 360°
+type: lidar2d
+description: 일반 회전형 2D 라이다. 0.12~8 m, 1° 간격, 10 Hz.
+fov_deg: 360
+beams: 360
+range_min: 0.12
+range_max: 8.0
+hz: 10
+noise: 0.01
+mount_hint: {z: 0.12}

@@ -1,0 +1,15 @@
+name: 바닥 IR (단차 센서)
+type: tof
+description: 바닥을 내려다보는 근거리 거리 센서. 바닥이 멀어지거나 사라지면 단차입니다. 0~0.2 m, 50 Hz.
+zones_x: 1
+zones_y: 1
+fov_h_deg: 10
+fov_v_deg: 10
+rays_per_zone: 2
+range_min: 0.0
+range_max: 0.2
+hz: 50
+noise: 0.002
+noise_rel: 0.0
+color: '#5f3dc4'
+mount_hint: {z: 0.03, pitch_deg: 90}

@@ -36,7 +36,7 @@ def _mean(v):
 
 
 def is_success(r):
-    return r.get('status') == 'succeeded' and not (r.get('collisions') or 0)
+    return r.get('status') == 'succeeded' and not (r.get('collisions') or 0) and not (r.get('falls') or 0)
 
 
 DEFAULT_WEIGHTS = dict(success=1.0, speed=1.0, clearance=1.0, smooth=1.0)
@@ -47,7 +47,7 @@ def score(s, w=None):
     w = dict(DEFAULT_WEIGHTS, **(w or {}))
     if not s or s.get('n', 0) == 0:
         return None
-    return (w['success'] * (100.0 * s['success'] - 50.0 * s['collision_rate'])
+    return (w['success'] * (100.0 * s['success'] - 50.0 * s['collision_rate'] - 50.0 * s.get('fall_rate', 0))
             + w['speed'] * 40.0 * (s['avg_speed'] or 0)
             + w['clearance'] * 20.0 * min(s['min_clear_p10'] if s['min_clear_p10'] is not None else 0, 0.25)
             - 2.0 * (s['recoveries'] or 0)
@@ -66,6 +66,7 @@ def summarize(records, weights=None):
     s = dict(
         n=n, success=k / n, ci_lo=lo, ci_hi=hi,
         collision_rate=sum(1 for r in rs if (r.get('collisions') or 0) > 0) / n,
+        fall_rate=sum(1 for r in rs if (r.get('falls') or 0) > 0) / n,
         timeout_rate=sum(1 for r in rs if r.get('status') == 'timeout') / n,
         avg_speed=_mean([r['ref_len'] / r['duration'] for r in ok if r.get('duration')]),
         time_mean=_mean([r.get('duration') for r in ok]),

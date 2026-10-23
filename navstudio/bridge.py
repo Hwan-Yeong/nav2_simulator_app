@@ -21,7 +21,7 @@ from nav2_msgs.action import NavigateToPose
 from nav2_msgs.srv import ClearEntireCostmap
 from nav_msgs.msg import OccupancyGrid, Path
 from rcl_interfaces.msg import Log
-from std_msgs.msg import String
+from std_msgs.msg import Empty, String
 from std_srvs.srv import Trigger
 
 LEVEL = {10: 'DEBUG', 20: 'INFO', 30: 'WARN', 40: 'ERROR', 50: 'FATAL'}
@@ -53,6 +53,9 @@ class Bridge(Node):
         self.replies = collections.deque(maxlen=50)
 
         self.pub_cmd = self.create_publisher(String, '/sim/cmd', rel)
+        self.pub_perception_clear = self.create_publisher(Empty, '/perception/clear', rel)
+        self.perception = None
+        self.create_subscription(String, '/perception/state', self._on_perception, 10)
         self.create_subscription(String, '/sim/state', self._on_state, 10)
         self.create_subscription(String, '/sim/reply', lambda m: self.replies.append(json.loads(m.data)), rel)
         self.create_subscription(Path, '/plan', lambda m: self._on_plan('global', m), 10)
@@ -73,6 +76,11 @@ class Bridge(Node):
             self.sim_state = json.loads(msg.data)
             self.sim_state_t = time.monotonic()
             self.seq['state'] += 1
+
+    def _on_perception(self, msg):
+        with self.lock:
+            self.perception = json.loads(msg.data)
+            self.seq['perception'] += 1
 
     def _on_plan(self, which, msg):
         pts = _path_pts(msg, 1 if len(msg.poses) < 400 else 2)
@@ -109,8 +117,11 @@ class Bridge(Node):
         """True once Nav2's lifecycle manager reports every node active (polled asynchronously, last answer).
 
         The action server exists from 'configured' on, so it alone does not mean bt_navigator accepts goals."""
+        now = time.monotonic()
+        if self._active_pending and now - self._active_pending > 2.0:
+            self._active_pending = False      # the manager is busy bringing nodes up and may drop the request: ask again
         if not self._active and not self._active_pending and self.lm_active.service_is_ready():
-            self._active_pending = True
+            self._active_pending = now
 
             def done(f):
                 self._active_pending = False
@@ -122,6 +133,10 @@ class Bridge(Node):
         return self._active
 
     def clear_costmaps(self):
+        """Clear both costmaps and the perception node's confirmed points (they would be marked again)."""
+        self.pub_perception_clear.publish(Empty())
+        with self.lock:
+            self.perception = None
         for c in self.clr:
             if c.service_is_ready():
                 c.call_async(ClearEntireCostmap.Request())
@@ -187,13 +202,14 @@ class Bridge(Node):
             self.sim_state = None
             self.plans = {'global': None, 'local': None}
             self.costmaps = {'global': None, 'local': None}
+            self.perception = None
             self.nav.update(status='idle', recoveries=0, distance_remaining=None, nav_time=0.0, goal=None)
             self.seq['reset'] += 1
 
     def snapshot(self):
         with self.lock:
             return dict(sim=self.sim_state, sim_age=time.monotonic() - self.sim_state_t if self.sim_state_t else None,
-                        nav=dict(self.nav), seq=dict(self.seq), plans=dict(self.plans),
+                        nav=dict(self.nav), seq=dict(self.seq), plans=dict(self.plans), perception=self.perception,
                         costmaps=dict(self.costmaps), logs=list(self.logs), log_seq=self.log_seq)
 
 

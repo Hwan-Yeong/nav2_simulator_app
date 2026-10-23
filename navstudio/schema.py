@@ -3,7 +3,7 @@ import copy
 
 import yaml
 
-from . import paths, paramgen
+from . import paths, paramgen, robot as robotlib
 
 _schema = None
 
@@ -20,7 +20,7 @@ def _targets(p, robot):
     out = []
     for node, path in tg:
         if '{sensor}' in path:
-            out += [[node, path.replace('{sensor}', s['name'])] for s in robot['sensors']]
+            out += [[node, path.replace('{sensor}', name)] for name, _ in robotlib.scan_sources(robot)]
         else:
             out.append([node, path])
     return out

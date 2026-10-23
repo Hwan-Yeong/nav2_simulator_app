@@ -1,0 +1,15 @@
+name: 멀티존 ToF 4×4
+type: tof
+description: 4×4 = 16 존 멀티존 ToF (VL53L5CX 계열 4×4 모드). 시야 45°×45°, 0.02~4 m, 30 Hz.
+zones_x: 4
+zones_y: 4
+fov_h_deg: 45
+fov_v_deg: 45
+rays_per_zone: 3
+range_min: 0.02
+range_max: 4.0
+hz: 30
+noise: 0.005
+noise_rel: 0.01
+color: '#d9480f'
+mount_hint: {z: 0.08, pitch_deg: 25}

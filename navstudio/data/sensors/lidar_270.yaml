@@ -1,0 +1,10 @@
+name: 2D 라이다 270° (안전 스캐너)
+type: lidar2d
+description: 모서리에 다는 270° 산업용 스캐너. 0.05~15 m, 0.5° 간격, 15 Hz.
+fov_deg: 270
+beams: 540
+range_min: 0.05
+range_max: 15.0
+hz: 15
+noise: 0.01
+mount_hint: {z: 0.2}

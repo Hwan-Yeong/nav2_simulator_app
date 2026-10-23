@@ -1,0 +1,10 @@
+name: 초음파 (40 kHz)
+type: ultrasonic
+description: 30° 원뿔 안의 가장 가까운 물체 거리. 0.03~4 m, 20 Hz. 유리·검은 물체처럼 빛 센서가 놓치는 장애물용.
+beam_deg: 30
+range_min: 0.03
+range_max: 4.0
+hz: 20
+noise: 0.01
+color: '#2b8a3e'
+mount_hint: {z: 0.15}

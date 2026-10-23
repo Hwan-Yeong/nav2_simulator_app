@@ -1,0 +1,14 @@
+name: Depth 카메라 (스테레오)
+type: depth
+description: 87°×58° 스테레오 depth 카메라 (D435 계열). 시뮬레이터 해상도 64×48, 0.2~4 m, 10 Hz. 잡음은 거리 제곱에 비례.
+width: 64
+height: 48
+fov_h_deg: 87
+fov_v_deg: 58
+range_min: 0.2
+range_max: 4.0
+hz: 10
+noise: 0.002
+noise_quad: 0.004
+color: '#1971c2'
+mount_hint: {z: 0.5, pitch_deg: 20}

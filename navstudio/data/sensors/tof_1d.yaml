@@ -1,0 +1,14 @@
+name: 1D ToF
+type: tof
+description: 단일 영역 ToF (VL53L1X 계열). 시야 27°, 0.04~4 m, 30 Hz. 앞쪽 위를 보게 달아 떠 있는 장애물을 봅니다.
+zones_x: 1
+zones_y: 1
+fov_h_deg: 27
+fov_v_deg: 27
+rays_per_zone: 5
+range_min: 0.04
+range_max: 4.0
+hz: 30
+noise: 0.005
+noise_rel: 0.01
+color: '#e8590c'

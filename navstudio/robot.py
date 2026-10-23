@@ -1,16 +1,21 @@
-"""Robot profiles: drive type, footprint, sensors and physical limits.
+"""Robot profiles: drive type, footprint, body height, sensors and physical limits.
 
 A profile describes the *physical* robot. The simulator uses all of it; Nav2 gets the footprint, the
 sensor topics and the kinematic structure (paramgen.robot_overrides). Nav2 speed limits stay Nav2 parameters
 (the parameter panel can copy them from the profile with one click).
+
+Sensors are mounts of sensor models (navstudio.sensors): 2D lidars feed the Nav2 obstacle layer (each on
+/scan_<name>, or merged into one /scan with scan_merge); ToF, ultrasonic and depth sensors feed the perception
+node (perception.mode 'rules'), or go straight into a Nav2 voxel layer ('direct').
 """
 import copy
 import math
 import os
 
+import numpy as np
 import yaml
 
-from . import paths
+from . import paths, sensors as sensorlib
 
 DRIVES = ('diff', 'omni', 'ackermann')
 
@@ -25,9 +30,15 @@ DEFAULT = {
     'limits': {'vx_max': 0.5, 'vx_min': -0.2, 'vy_max': 0.0, 'wz_max': 1.5,
                'ax_max': 1.0, 'ay_max': 1.0, 'az_max': 4.0},
     'actuator': {'tau': 0.08, 'slip_lin': 0.02, 'slip_ang': 0.03},
+    'climb_height': 0.012,     # obstacles this low (and steps down this shallow) are driven over
     'sensors': [{'name': 'scan', 'type': 'lidar2d', 'x': 0.0, 'y': 0.0, 'z': 0.107, 'yaw_deg': 0.0,
                  'fov_deg': 360.0, 'beams': 360, 'range_min': 0.17, 'range_max': 8.0, 'hz': 10.0, 'noise': 0.01}],
+    # several lidars merged into one 360 deg /scan in frame base_scan (z: mean of the sources when None)
+    'scan_merge': {'enabled': False, 'sources': [], 'frame': 'base_scan', 'z': None, 'angle_increment_deg': 0.9,
+                   'range_min': 0.05, 'range_max': 12.0},
+    'perception': {'mode': 'rules'},   # rules | direct | off: how ToF / ultrasonic / depth data reach Nav2
 }
+PERCEPTION_MODES = ('rules', 'direct', 'off')
 
 
 def _merge(base, over):
@@ -61,17 +72,68 @@ def normalize(profile):
             raise ValueError('차량형(ackermann)은 wheelbase > 0, 최대 조향각 1~89° 가 필요합니다')
     if p['drive'] != 'omni':
         p['limits']['vy_max'] = 0.0
-    names = set()
-    for s in p['sensors']:
-        s.update(_merge(DEFAULT['sensors'][0], s))
-        if s['name'] in names or not s['name'].replace('_', '').isalnum():
-            raise ValueError(f"센서 이름 '{s['name']}' 이 중복되었거나 영문/숫자/_ 가 아닙니다")
-        names.add(s['name'])
-        if not 1 <= float(s['fov_deg']) <= 360:
-            raise ValueError('라이다 FOV 는 1~360° 입니다')
-    if not p['sensors']:
-        raise ValueError('라이다가 최소 1개 필요합니다')
+    if not 0 < float(p['body']['height']) <= 3.0:
+        raise ValueError('차체 높이는 0~3 m 입니다')
+    p['climb_height'] = float(p['climb_height'])
+    if not 0 <= p['climb_height'] <= 0.2:
+        raise ValueError('넘을 수 있는 턱 높이는 0~0.2 m 입니다')
+    p['sensors'] = [sensorlib.normalize_mount(s) for s in (profile or {}).get('sensors', DEFAULT['sensors'])]
+    names = [s['name'] for s in p['sensors']]
+    dup = {n for n in names if names.count(n) > 1}
+    if dup:
+        raise ValueError(f"센서 이름이 중복되었습니다: {', '.join(sorted(dup))}")
+    if not lidars(p):
+        raise ValueError('켜져 있는 2D 라이다가 최소 1개 필요합니다 (Nav2 장애물 레이어 입력)')
+    mg = p['scan_merge']
+    mg['enabled'] = bool(mg.get('enabled'))
+    if mg['enabled']:
+        ln = {s['name'] for s in lidars(p)}
+        mg['sources'] = [n for n in mg.get('sources') or [] if n in ln] or sorted(ln)
+        if 'scan' in ln:
+            raise ValueError("라이다를 병합할 때는 라이다 이름으로 'scan' 을 쓸 수 없습니다 (/scan 이 병합 결과입니다)")
+        if not 0.05 <= float(mg['angle_increment_deg']) <= 5:
+            raise ValueError('병합 스캔 각 해상도는 0.05~5° 입니다')
+    if p['perception'].get('mode') not in PERCEPTION_MODES:
+        raise ValueError(f"인식 방식은 {', '.join(PERCEPTION_MODES)} 중 하나입니다")
     return p
+
+
+def lidars(R):
+    return [s for s in R['sensors'] if s['type'] == 'lidar2d' and s['enabled']]
+
+
+def sensors_3d(R):
+    """Enabled ToF / ultrasonic / depth mounts."""
+    return [s for s in R['sensors'] if s['type'] != 'lidar2d' and s['enabled']]
+
+
+def perception_node(R):
+    """True when the perception node runs (range sensors + perception mode 'rules')."""
+    return bool(sensors_3d(R)) and R['perception']['mode'] == 'rules'
+
+
+def lidar_topic(s, R):
+    if R['scan_merge']['enabled'] or s['name'] != 'scan':
+        return '/scan_' + s['name']
+    return '/scan'
+
+
+def scan_sources(R):
+    """(source name, topic) of the laser scans Nav2 should use: the merged /scan and lidars left out of the merge."""
+    mg = R['scan_merge']
+    out = [('scan', '/scan')] if mg['enabled'] else []
+    for s in lidars(R):
+        if not (mg['enabled'] and s['name'] in mg['sources']):
+            out.append((s['name'], lidar_topic(s, R)))
+    return out
+
+
+def merge_height(R):
+    mg = R['scan_merge']
+    if mg.get('z') is not None:
+        return float(mg['z'])
+    src = [s for s in lidars(R) if s['name'] in mg['sources']]
+    return float(np.mean([s['z'] for s in src])) if src else 0.1
 
 
 def polygon(profile, n_circle=24):

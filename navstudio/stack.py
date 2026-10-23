@@ -95,7 +95,8 @@ class Stack:
         map_yaml = map_path(map_id)
         sp = '[' + ', '.join(f'{float(v):.4f}' for v in start_pose) + ']'
         cmd = ['ros2', 'launch', LAUNCH, f'params_file:={params}', f'map:={map_yaml}', f'robot_file:={robot_file}',
-               f'sim_params:={sim_file}', f'start_pose:={sp}', 'log_level:=warn', f'python:={sys.executable}']
+               f'sim_params:={sim_file}', f'start_pose:={sp}', 'log_level:=warn', f'python:={sys.executable}',
+               f'perception:={str(robotlib.perception_node(R)).lower()}']
         with self.lock:
             self.log.clear()
             self.session = dict(map=map_id, robot=R, stack=stack_id, overrides=overrides, start_pose=list(start_pose),

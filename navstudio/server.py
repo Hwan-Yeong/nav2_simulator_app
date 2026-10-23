@@ -137,6 +137,7 @@ def _apply_scene(slot):
     sc = S['scene']
     if sc is not None and slot.bridge is not None:
         slot.bridge.node.sim(op='world', static_obs=sc.get('static_obs', []), dyn_obs=sc.get('dyn_obs', []), episode='scene')
+        slot.bridge.node.clear_costmaps()   # obstacles moved: forget what perception had confirmed
 
 
 # ------------------------------------------------------------------ info / catalog
@@ -589,6 +590,10 @@ async def ws(sock: WebSocket):
                         cm = dict(snap['costmaps'][which])
                         cm['z'] = _z(cm.pop('data'))
                         after.append(dict(type='costmap', slot=s.idx, **cm))
+                k = 'perception'
+                if seq.get(k) and seq.get(k) != st['seq'].get(k) and snap['perception'] is not None:
+                    st['seq'][k] = seq[k]
+                    after.append(dict(type='perception', slot=s.idx, **snap['perception']))
                 new = [l for l in snap['logs'] if l['seq'] > st['log']]
                 if new:
                     st['log'] = new[-1]['seq']

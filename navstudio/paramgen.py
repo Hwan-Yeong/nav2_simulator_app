@@ -17,6 +17,9 @@ import yaml
 from . import paths, robot as robotlib
 
 ARM_ONLY_LAYERS = ('perception_replace_layer', 'cliff_replace_layer')
+PERCEPTION_NODE = 'navstudio_perception'
+PERCEPTION_LAYER = 'perception_layer'      # perception mode 'rules': confirmed obstacles / drops
+SENSOR_LAYER = 'sensor_layer'              # perception mode 'direct': raw range-sensor clouds in a voxel layer
 COSTMAPS = ('local_costmap', 'global_costmap')
 CUSTOM_PLUGINS = ('everybot_path_planner', 'everybot_theta_star_planner', 'everybot_behavior_plugins')
 
@@ -167,19 +170,28 @@ def robot_overrides(doc, R):
             for n in names:
                 ol.pop(n, None)
             srcs = []
-            for s in R['sensors']:
+            lid = {s['name']: s for s in robotlib.lidars(R)}
+            mg = R['scan_merge']
+            for name, topic in robotlib.scan_sources(R):
+                rmin, rmax = (mg['range_min'], mg['range_max']) if name == 'scan' and mg['enabled'] else \
+                    (lid[name]['range_min'], lid[name]['range_max'])
                 src = copy.deepcopy(tmpl) or dict(clearing=True, marking=True, data_type='LaserScan',
                                                   obstacle_max_range=2.5, raytrace_max_range=3.0,
                                                   observation_persistence=0.0)
-                src['topic'] = '/scan' if s['name'] == 'scan' else '/scan_' + s['name']
+                src['topic'] = topic
                 src['data_type'] = 'LaserScan'
-                src['obstacle_min_range'] = float(s['range_min'])
-                src['raytrace_min_range'] = float(s['range_min'])
-                src['obstacle_max_range'] = min(float(src.get('obstacle_max_range', 2.5)), float(s['range_max']))
-                src['raytrace_max_range'] = min(float(src.get('raytrace_max_range', 3.0)), float(s['range_max']))
-                ol[s['name']] = src
-                srcs.append(s['name'])
+                src['obstacle_min_range'] = float(rmin)
+                src['raytrace_min_range'] = float(rmin)
+                src['obstacle_max_range'] = min(float(src.get('obstacle_max_range', 2.5)), float(rmax))
+                src['raytrace_max_range'] = min(float(src.get('raytrace_max_range', 3.0)), float(rmax))
+                ol[name] = src
+                srcs.append(name)
             ol['observation_sources'] = ' '.join(srcs)
+        _range_sensor_layers(p, R, cm)
+    if robotlib.perception_node(R):
+        from .sim.perception import DEFAULTS
+        prm = dict(DEFAULTS, use_sim_time=True, obstacle_max_height=round(float(R['body']['height']) + 0.05, 3))
+        doc[PERCEPTION_NODE] = {'ros__parameters': prm}
     kind = _controller_kind(doc)
     fp = node_params(doc, 'controller_server').setdefault('FollowPath', {})
     vy = R['limits']['vy_max'] if R['drive'] == 'omni' else 0.0
@@ -204,6 +216,46 @@ def robot_overrides(doc, R):
             ref = vy if 'velocity' in key else R['limits']['ay_max']
             vs[key][1] = sign * ref if vy > 0 else 0.0
     return doc
+
+
+def _insert_layer(p, name):
+    plugins = list(p.get('plugins', []))
+    if name not in plugins:
+        at = plugins.index('inflation_layer') if 'inflation_layer' in plugins else len(plugins)
+        plugins.insert(at, name)
+    p['plugins'] = plugins
+
+
+def _range_sensor_layers(p, R, cm):
+    """Costmap layer for ToF / ultrasonic / depth: perception output ('rules') or the raw clouds ('direct')."""
+    s3 = robotlib.sensors_3d(R)
+    mode = R['perception']['mode']
+    local = cm == 'local_costmap'
+    if s3 and mode == 'rules':
+        src = lambda topic: dict(topic=topic, data_type='PointCloud2', sensor_frame='base_link', marking=True, clearing=False,
+                                 min_obstacle_height=-1.0, max_obstacle_height=2.0, obstacle_min_range=0.0,
+                                 obstacle_max_range=3.0 if local else 10.0, observation_persistence=0.0,
+                                 expected_update_rate=0.0, inf_is_valid=False)
+        p[PERCEPTION_LAYER] = dict(plugin='nav2_costmap_2d::ObstacleLayer', enabled=True, footprint_clearing_enabled=False,
+                                   combination_method=1, observation_sources='perception_obstacles perception_drops',
+                                   perception_obstacles=src('/perception/obstacles'), perception_drops=src('/perception/drops'))
+        _insert_layer(p, PERCEPTION_LAYER)
+    elif s3 and mode == 'direct':
+        top = round(float(R['body']['height']) + 0.05, 3)
+        names = []
+        layer = dict(plugin='nav2_costmap_2d::VoxelLayer', enabled=True, footprint_clearing_enabled=True, combination_method=1,
+                     publish_voxel_map=False, origin_z=0.0, z_resolution=0.05, z_voxels=max(4, min(16, int(top / 0.05) + 1)),
+                     max_obstacle_height=top, mark_threshold=0, unknown_threshold=15)
+        for s in s3:
+            names.append(s['name'])
+            layer[s['name']] = dict(topic=f"/sensors/{s['name']}/points", data_type='PointCloud2', marking=True, clearing=True,
+                                    min_obstacle_height=0.02, max_obstacle_height=top, obstacle_min_range=0.0,
+                                    obstacle_max_range=min(float(s['range_max']), 2.5), raytrace_min_range=0.0,
+                                    raytrace_max_range=min(float(s['range_max']), 3.0), observation_persistence=0.0,
+                                    expected_update_rate=0.0, inf_is_valid=False)
+        layer['observation_sources'] = ' '.join(names)
+        p[SENSOR_LAYER] = layer
+        _insert_layer(p, SENSOR_LAYER)
 
 
 def available_packages():

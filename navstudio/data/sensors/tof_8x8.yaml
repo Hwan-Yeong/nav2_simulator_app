@@ -1,0 +1,15 @@
+name: 멀티존 ToF 8×8
+type: tof
+description: 8×8 = 64 존 멀티존 ToF (VL53L5CX/L8CX 계열 8×8 모드). 시야 45°×45°, 0.02~4 m, 15 Hz. 존 마스크로 일부 존만 쓸 수 있습니다.
+zones_x: 8
+zones_y: 8
+fov_h_deg: 45
+fov_v_deg: 45
+rays_per_zone: 2
+range_min: 0.02
+range_max: 4.0
+hz: 15
+noise: 0.005
+noise_rel: 0.01
+color: '#c2255c'
+mount_hint: {z: 0.08, pitch_deg: 25}

@@ -287,12 +287,11 @@ def shot_sensorsim(p):
            {'type': 'cliff', 'x0': x0 + 2.0, 'y0': y0 + 0.3, 'x1': x0 + 2.6, 'y1': y0 + 1.2, 'depth': 0.3},
            {'type': 'rect', 'x0': x0 + 1.8, 'y0': y0 - 1.3, 'x1': x0 + 2.6, 'y1': y0 - 0.5, 'z0': 0.7, 'z1': 0.75}]
     api('POST', '/api/session/stop', {})
-    br, pg = page(p, B + '/#sim')
-    load_scene_in_ui(pg, 'synth_warehouse', ep, obs, robot_id='everybot_home')
-    pg.reload()
-    pg.wait_for_timeout(3000)
-    sim_start('synth_warehouse', ep, obs, robot_id='everybot_home')
-    pg.wait_for_timeout(2500)
+    api('POST', '/api/session/start', {'slot': 0, 'map': 'synth_warehouse', 'robot_id': 'everybot_home', 'stack': 'prod', 'values': {}, 'start': ep['start']})
+    wait_slots(1)
+    scene('synth_warehouse', ep, obs)
+    br, pg = page(p, B + '/?debug#sim')  # opened after the start: the page takes over the running session and its scene
+    api('POST', '/api/nav/goal', {'pose': ep['goal']})
     pg.click('#runbar button[title^="로봇 따라가기"]')
     box = pg.locator('#view').bounding_box()
     pg.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
@@ -305,6 +304,14 @@ def shot_sensorsim(p):
     shot(pg, 'sim_sensors.png')
     save_boxes('sim_sensors', pg, {'tools': '#tools', 'cliff': 'button[data-tool="cliff"]', 'opts': '#toolOpts', 'layers': '#layers',
                                    'panel': '#tSensors', 'view': '#stage'})
+    # the low box and the drop on the map (world -> screen through the ?debug viewport hook) for their callouts
+    allb = json.load(open(BOXES))
+    for key, o in (('lowbox', obs[0]), ('dropbox', obs[1])):
+        x, y, w, h = pg.evaluate(f"""(() => {{ const r = document.getElementById('view').getBoundingClientRect();
+            const a = window.__vp.toS({o['x0']}, {o['y1']}), b = window.__vp.toS({o['x1']}, {o['y0']});
+            return [a[0] + r.left, a[1] + r.top, b[0] - a[0], b[1] - a[1]]; }})()""")
+        allb['sim_sensors'][key] = {'x': round(x / VW, 4), 'y': round(y / VH, 4), 'width': round(w / VW, 4), 'height': round(h / VH, 4)}
+    json.dump(allb, open(BOXES, 'w'), indent=1)
     api('POST', '/api/session/stop', {})
     br.close()
 

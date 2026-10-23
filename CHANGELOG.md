@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-23
+
 ### 추가
 - **센서 라이브러리**: 센서 모델(종류 + 사양)을 만들고 저장·수정·삭제합니다. 기본 모델: 2D 라이다 360°/270°/240°, 1D ToF, 멀티존 ToF 4×4·8×8, 바닥 IR, 초음파, Depth 카메라. 저장 위치 `~/.navstudio/sensors/`.
 - **센서 종류 플러그인**: 센서 종류 하나가 파이썬 파일 하나(`SensorType`: 파라미터 스키마, 광선, 측정, 발행, 인식 규칙)입니다. `~/.navstudio/sensor_types/*.py` 를 읽고, 라이브러리의 **템플릿 만들기** 로 설명이 달린 예제를 만들고 **다시 읽기** 로 반영합니다. 폼은 스키마에서 자동으로 만들어집니다. [docs/SENSORS.md](docs/SENSORS.md)
@@ -73,6 +75,7 @@ nav_tuning 분석 저장소에서 앱만 분리한 첫 버전입니다.
 - 공개 저장소에는 합성 맵 4종만 기본으로 넣습니다. 현장 맵은 맵 올리기로 추가합니다.
 - Docker 는 기본으로 이 PC 에서만 접속됩니다 (`127.0.0.1:8765`).
 
-[Unreleased]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Hwan-Yeong/nav2_simulator_app/releases/tag/v0.1.0

@@ -3,7 +3,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: everybot/navstudio:0.2.0
+    image: everybot/navstudio:0.3.0
     ports:
       - "127.0.0.1:8765:8765"     # this PC only; use "8765:8765" to allow other PCs on the network
     volumes:

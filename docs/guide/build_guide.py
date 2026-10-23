@@ -170,11 +170,11 @@ PAGES.append('''
 <section class="page">
   <header class="ph"><span>04</span>시뮬레이션 따라하기</header>
   <ol class="steps compact">
-    <li><b>맵 고르기</b> — 왼쪽 <b>맵</b> 탭에서 맵 카드를 누릅니다 (내 맵은 <b>맵 추가</b> 로, 12장). 아래 시나리오 목록에서 미리 만든 상황(정상 · 미등록 장애물 · 보행자)을 불러올 수도 있습니다.</li>
+    <li><b>맵 고르기</b> — 왼쪽 <b>맵</b> 탭에서 맵 카드를 누릅니다 (내 맵은 <b>맵 추가</b> 로, 12장). 아래 시나리오 목록에서 미리 만든 상황(정상 · 미등록 장애물 · 보행자 · 낮은·공중 장애물 · 단차)을 불러올 수도 있습니다.</li>
     <li><b>시작</b> — 오른쪽 위 <b>시뮬레이션 시작</b>. 약 4초 뒤 “실행 중” 이 됩니다. 차량형 로봇은 약 12초 걸립니다.</li>
     <li><b>출발점</b> — 출발점 도구(<kbd>S</kbd>)로 지도를 누른 채 끌면 로봇이 그 자리·방향으로 옮겨집니다.</li>
     <li><b>목표</b> — 목표 도구(<kbd>G</kbd>)로 누른 채 끌어 도착 방향을 정하면 바로 출발합니다.</li>
-    <li><b>장애물 놓기</b> — 아래 도구로 주행 중에도 놓을 수 있습니다. 맵에는 없고 라이다에만 보이는 물체라서, 지도에 없는 짐이나 사람을 만난 상황을 재현합니다.</li>
+    <li><b>장애물 놓기</b> — 아래 도구로 주행 중에도 놓을 수 있습니다. 맵에 없는 물체라서, 지도에 없는 짐이나 사람·턱·단차를 만난 상황을 재현합니다.</li>
     <li><b>지켜보기</b> — 오른쪽 패널의 상태가 “도착” 이 되면 성공입니다. 실패하면 Nav2 메시지에서 이유를 확인합니다.</li>
   </ol>
   ''' + shot('sim_tools.png', [('opts', 1, 'tr', True)], '박스(주황), 의자 다리 4개, 왕복하는 보행자(보라)를 놓은 장면. 보행자 도구를 고르면 속도·크기 옵션이 나타납니다 ①.') + '''
@@ -275,7 +275,7 @@ PAGES.append('''
 <section class="page">
   <header class="ph"><span>08</span>센서 설계</header>
   <p>로봇에 2D 라이다 말고도 ToF(단일 · 멀티존), 초음파, Depth 카메라를 달 수 있습니다. 센서는 <b>센서 라이브러리</b> 의 모델(종류 + 사양)을 골라 달고, 로봇 위의 위치와 각도를 정합니다.</p>
-  ''' + shot('robot_sensors.png', [('add', 1, 'mr'), ('card', 2, 'tr', True), ('specs', 3, 'mr'), ('view', 4, 'bl'), ('cad', 5, 'bc'), ('three', 6, 'ml')]) + legend([
+  ''' + shot('robot_sensors.png', [('add', 1, 'bc'), ('card', 2, 'tr', True), ('specs', 3, 'mr'), ('view', 4, 'bc'), ('cad', 5, 'mc'), ('three', 6, 'ml')]) + legend([
     ('라이브러리 · 센서 추가', '라이브러리에서 센서 모델을 만들고 고칩니다. 센서 추가로 모델을 골라 로봇에 답니다'),
     ('센서 카드', '이름, 모델, 켜기/끄기, 위치 x·y·높이 z, 방향 roll·pitch(+ 가 아래)·yaw. ⋯ 메뉴: 복제, 좌우 대칭 복제, 라이브러리 값으로 되돌리기'),
     ('센서 사양', '주기·거리·잡음·시야·해상도. 멀티존 ToF 는 존 마스크(쓰는 존만 켜기)'),
@@ -301,11 +301,11 @@ PAGES.append('''
 <section class="page">
   <header class="ph"><span>09</span>낮은 장애물과 단차</header>
   <p>2D 라이다는 자기 높이에 걸리는 것만 봅니다. 5 cm 턱, 테이블 상판, 계단 같은 단차는 바닥을 보는 센서와 인식 처리가 있어야 피합니다.</p>
-  ''' + shot('sim_sensors.png', [('cliff', 1, 'mr'), ('opts', 2, 'tr', True), ('layers', 3, 'bl'), ('view', 4, 'mc'), ('panel', 5, 'tl', True)]) + legend([
+  ''' + shot('sim_sensors.png', [('cliff', 1, 'mr'), ('opts', 2, 'tr', True), ('layers', 3, 'bl'), ('lowbox', 4, 'tl'), ('dropbox', 4, 'tr'), ('panel', 5, 'tl', True)]) + legend([
     ('단차 도구', '끌어서 바닥이 꺼진 곳을 그립니다 (빗금). 깊이는 옵션에서. 로봇 중심이 들어가면 떨어져 멈춥니다(낙하)'),
     ('박스 높이', '일반(0~1 m) · 낮은 턱(5 cm) · 문턱(1.5 cm) · 공중(0.65~0.75 m) 또는 아래·위 높이 직접 입력. 선택 도구로 고른 장애물도 바꿉니다'),
     ('레이어', '센서 측정(센서 색 점, 바닥에 맞은 점은 흐리게) · 인식 결과(확정 장애물 노란 사각형, 단차 ×)'),
-    ('지도', '낮은 턱 앞에서 확정된 장애물이 costmap 에 올라 로봇이 돌아가고, 단차 가장자리에 × 가 찍힙니다'),
+    ('지도', '5 cm 턱(노란 사각형 = 확정된 인식 결과)이 costmap 에 올라 로봇이 돌아가고, 단차 가장자리에는 × 가 찍힙니다. 아래쪽 공중 장애물(0.70~0.75 m)은 차체보다 높아 그 아래로 지나갑니다'),
     ('센서 · 인식', 'ToF 존 히트맵(센서 뒤에서 본 모습, 빨강 = 가까움), Depth 축소 영상, 1D 거리 막대, 확정 개수, 인식 지우기'),
   ]) + '''
   <div class="cols">
@@ -490,6 +490,7 @@ figcaption { font-size: 8pt; color: var(--muted); margin-top: 1.2mm; }
 .tbl th { white-space: nowrap; color: var(--ink); width: 1%; font-weight: 700; }
 .tbl.two th { width: auto; background: var(--panel); }
 .tbl.tools td:first-child { white-space: nowrap; font-weight: 700; }
+.tbl.tools th:last-child { width: auto; }
 .tbl.faq th { white-space: normal; width: 34%; }
 .note { background: var(--panel); border-left: 2pt solid var(--accent); padding: 2mm 3mm; font-size: 8.6pt; color: #34414c; border-radius: 0 3pt 3pt 0; }
 .warn { background: var(--warn-soft); border-left: 2pt solid var(--warn); padding: 2mm 3mm; font-size: 8.8pt; border-radius: 0 3pt 3pt 0; }

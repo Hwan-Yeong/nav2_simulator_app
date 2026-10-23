@@ -39,6 +39,7 @@ figcaption { font-size: 8pt; color: var(--muted); margin-top: 1.2mm; }
 .tbl th { white-space: nowrap; color: var(--ink); width: 1%; font-weight: 700; }
 .tbl.two th { width: auto; background: var(--panel); }
 .tbl.tools td:first-child { white-space: nowrap; font-weight: 700; }
+.tbl.tools th:last-child { width: auto; }
 .tbl.faq th { white-space: normal; width: 34%; }
 .note { background: var(--panel); border-left: 2pt solid var(--accent); padding: 2mm 3mm; font-size: 8.6pt; color: #34414c; border-radius: 0 3pt 3pt 0; }
 .warn { background: var(--warn-soft); border-left: 2pt solid var(--warn); padding: 2mm 3mm; font-size: 8.8pt; border-radius: 0 3pt 3pt 0; }
@@ -70,38 +71,38 @@ figcaption { font-size: 8pt; color: var(--muted); margin-top: 1.2mm; }
 .cols .shot.small .frame { max-height: 64mm; }
 .cols .shot.small .frame img { max-height: 64mm; width: auto; max-width: 100%; display: block; margin: 0 auto; }
 </style></head><body>
-<section data-n="1 / 12" class="page cover">
+<section data-n="1 / 14" class="page cover">
   <div class="cover-top">
     <div class="brand"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-width="2.6"/><path d="M16 16 L26 11" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="16" cy="16" r="2.8" fill="currentColor"/></svg>Everybot</div>
     <h1>Nav Studio<br><span>사용 가이드</span></h1>
-    <p class="lead">브라우저에서 실제 Nav2 스택으로 로봇 주행을 시뮬레이션하고,<br>설정 여러 개를 나란히 띄워 비교하고, 벤치마크와 자동 튜닝으로 검증합니다.</p>
-    <div class="meta">버전 0.2.0 · 2026-10-22</div>
+    <p class="lead">브라우저에서 실제 Nav2 스택으로 로봇 주행을 시뮬레이션하고, 로봇과 센서를 설계하고,<br>설정 여러 개를 나란히 띄워 비교하고, 벤치마크와 자동 튜닝으로 검증합니다.</p>
+    <div class="meta">버전 0.3.0 · 2026-10-23</div>
   </div>
   <figure class="hero"><div class="frame"><img src="img/sim_compare.png" alt=""></div></figure>
   <div class="cover-grid">
     <div><b>시뮬레이션</b><span>맵·장애물·보행자를 놓고 실시간 주행</span></div>
     <div><b>동시 실행 비교</b><span>설정 2~4개를 나란히, 같은 순간에 출발</span></div>
-    <div><b>로봇 설계</b><span>구동 방식·외곽·라이다를 끌어서 편집</span></div>
+    <div><b>로봇 · 센서 설계</b><span>외곽·라이다·ToF·Depth 를 끌어서 배치</span></div>
     <div><b>벤치마크 · 튜닝</b><span>통계로 비교하고 Optuna 로 탐색</span></div>
   </div>
 </section>
-<section data-n="2 / 12" class="page">
+<section data-n="2 / 14" class="page">
   <header class="ph"><span>01</span>개요</header>
   <h2>Nav Studio 는 무엇인가</h2>
   <p>Nav Studio 는 Everybot 로봇의 주행 설정(Nav2 Humble)을 PC 에서 바로 시험하는 앱입니다. 브라우저 화면의 로봇은 실제 Nav2 노드
-  (controller · planner · behavior tree · costmap · velocity smoother)가 움직이고, 로봇과 센서는 2D 시뮬레이터가 대신합니다.
+  (controller · planner · behavior tree · costmap · velocity smoother)가 움직이고, 로봇과 센서는 2.5D 시뮬레이터가 대신합니다.
   실제 로봇 없이 파라미터를 바꿔 보고, 바꾼 효과를 숫자로 비교하고, 더 나은 값을 찾을 수 있습니다.</p>
   <div class="arch">
     <div class="box">브라우저<small>화면 · 조작</small></div><div class="arrow">⇄<small>HTTP · WebSocket</small></div>
     <div class="box">Nav Studio 서버<small>설정 생성 · 세션 · 벤치마크 · 튜닝</small></div><div class="arrow">⇄<small>ROS 2 (전용 도메인)</small></div>
     <div class="box accent">Nav2 Humble<small>controller · planner · BT</small></div><div class="arrow">⇄</div>
-    <div class="box">2D 시뮬레이터<small>로봇 · 라이다 · 보행자</small></div>
+    <div class="box">2.5D 시뮬레이터<small>로봇 · 라이다 · ToF · Depth · 보행자</small></div>
   </div>
   <h3>작업 공간</h3>
   <table class="tbl">
     <tr><th>시뮬레이션</th><td>맵을 고르고 목표를 찍으면 로봇이 주행합니다. 박스·기둥·의자·보행자를 실행 중에 놓을 수 있고, costmap·경로·라이다·속도·장애물 이격거리를 실시간으로 봅니다. 파라미터를 바꾸면 Nav2 를 다시 띄워 적용합니다. <b>동시 실행</b> 으로 설정이 다른 시뮬레이션을 최대 4개 나란히 띄워 비교하고, 스택과 파라미터 묶음은 <b>설정 세트</b> 로 저장합니다.</td></tr>
-    <tr><th>로봇 설계</th><td>구동 방식(차동 · 전방향 · 차량형), 외곽(footprint), 라이다 위치·방향·시야각, 물리 한계를 정합니다. 여기서 정한 값으로 시뮬레이터와 Nav2 설정이 자동으로 만들어집니다.</td></tr>
-    <tr><th>벤치마크</th><td>최대 4개 설정을 같은 시나리오(정상 · 맵에 없는 장애물 · 보행자)로 반복 주행해 성공률, 충돌, 속도, 이격, 복구 횟수를 비교합니다.</td></tr>
+    <tr><th>로봇 설계</th><td>구동 방식(차동 · 전방향 · 차량형), 외곽(footprint), 물리 한계, 센서(라이다 · ToF · 초음파 · Depth)의 종류·위치·각도와 인식 방식을 정합니다. 여기서 정한 값으로 시뮬레이터와 Nav2 설정이 자동으로 만들어집니다.</td></tr>
+    <tr><th>벤치마크</th><td>최대 4개 설정을 같은 시나리오(정상 · 맵에 없는 장애물 · 보행자 · 낮은·공중 장애물 · 단차)로 반복 주행해 성공률, 충돌, 낙하, 속도, 이격, 복구 횟수를 비교합니다.</td></tr>
     <tr><th>자동 튜닝</th><td>고른 파라미터의 범위 안에서 점수가 가장 높은 조합을 찾습니다. 찾은 값은 바로 적용하거나 다른 맵에서 검증합니다.</td></tr>
   </table>
   <h3>필요한 환경</h3>
@@ -115,7 +116,7 @@ figcaption { font-size: 8pt; color: var(--muted); margin-top: 1.2mm; }
   </table>
   <p class="note">시뮬레이션은 실제 시간과 같은 속도(1배속)로 돌아갑니다. Nav2 의 제어 루프가 실제 시계 기준으로 동작하기 때문입니다. 많은 주행이 필요할 때는 벤치마크가 여러 시뮬레이션을 동시에 돌립니다.</p>
 </section>
-<section data-n="3 / 12" class="page">
+<section data-n="3 / 14" class="page">
   <header class="ph"><span>02</span>설치와 실행</header>
   <h2>A. Docker 로 실행하기 <em>권장</em></h2>
   <ol class="steps">
@@ -148,36 +149,37 @@ navstudio                    # 서버를 띄우고 브라우저를 엽니다</pr
   </table>
   <p class="note">Nav Studio 는 사용자 셸에 설정된 다른 ROS 작업공간이나 DDS 설정을 쓰지 않습니다. 모든 통신은 이 PC 안(localhost)에서만 오가므로 같은 네트워크의 실제 로봇에 영향을 주지 않습니다.</p>
 </section>
-<section data-n="4 / 12" class="page">
+<section data-n="4 / 14" class="page">
   <header class="ph"><span>03</span>화면 구성</header>
   <h2>시뮬레이션 화면</h2>
-  <figure class="shot"><div class="frame"><img src="img/sim_overview.png" alt=""><span class="num" style="left:18.42%;top:4.80%">1</span><span class="num" style="left:55.58%;top:4.28%">2</span><span class="num" style="left:87.43%;top:4.62%">3</span><span class="num" style="left:2.50%;top:11.05%">4</span><span class="num" style="left:26.94%;top:7.11%">5</span><span class="num" style="left:42.37%;top:11.33%">6</span><span class="num" style="left:31.37%;top:93.11%">7</span><span class="num" style="left:80.07%;top:7.11%">8</span><span class="num" style="left:80.07%;top:87.92%">9</span></div></figure><ol class="legend two"><li><span><b>작업 공간 전환</b> — 시뮬레이션 · 로봇 설계 · 벤치마크 · 자동 튜닝</span></li><li><span><b>현재 설정과 상태</b> — 맵 · 로봇 · 스택(변경 개수), 실행 상태(정지됨 / 시작 중 / 실행 중 / 오류)</span></li><li><span><b>시작 · 변경 적용</b> — 정지 상태면 “시뮬레이션 시작”, 설정을 바꾸면 “변경 적용 (재시작)” 으로 바뀝니다</span></li><li><span><b>왼쪽 패널</b> — 맵 고르기·추가·시나리오 불러오기 / 로봇·스택·설정 세트 / 파라미터 조정</span></li><li><span><b>편집 도구</b> — 선택 · 화면 이동 · 출발점 · 목표 · 박스 · 기둥 · 의자 · 보행자 · 지우개</span></li><li><span><b>레이어</b> — 전역·지역 costmap, 라이다 점, 경로, 지나온 궤적, 격자. 오른쪽 끝 버튼은 맵 전체 보기</span></li><li><span><b>주행 막대</b> — 동시 실행 개수(1~4) · 주행(현재 목표로 다시 보내기) · 정지 · 출발점으로 · 로봇 따라가기 · 장애물 모두 지우기</span></li><li><span><b>주행 상태</b> — 대기 / 주행 중 / 도착 / 실패, 남은 거리, 복구 동작 횟수, 아래에 속도·이격 그래프와 이번 주행 기록</span></li><li><span><b>Nav2 메시지</b> — Nav2 노드의 경고·오류를 실시간으로 보여 줍니다. “실행 로그” 는 전체 출력</span></li></ol>
+  <figure class="shot"><div class="frame"><img src="img/sim_overview.png" alt=""><span class="num" style="left:18.42%;top:4.80%">1</span><span class="num" style="left:55.58%;top:4.28%">2</span><span class="num" style="left:87.43%;top:4.62%">3</span><span class="num" style="left:2.50%;top:11.05%">4</span><span class="num" style="left:26.94%;top:7.11%">5</span><span class="num" style="left:30.26%;top:11.33%">6</span><span class="num" style="left:31.37%;top:93.11%">7</span><span class="num" style="left:80.07%;top:7.11%">8</span><span class="num" style="left:80.07%;top:90.44%">9</span></div></figure><ol class="legend two"><li><span><b>작업 공간 전환</b> — 시뮬레이션 · 로봇 설계 · 벤치마크 · 자동 튜닝</span></li><li><span><b>현재 설정과 상태</b> — 맵 · 로봇 · 스택(변경 개수), 실행 상태(정지됨 / 시작 중 / 실행 중 / 오류)</span></li><li><span><b>시작 · 변경 적용</b> — 정지 상태면 “시뮬레이션 시작”, 설정을 바꾸면 “변경 적용 (재시작)” 으로 바뀝니다</span></li><li><span><b>왼쪽 패널</b> — 맵 고르기·추가·시나리오 불러오기 / 로봇·스택·설정 세트 / 파라미터 조정</span></li><li><span><b>편집 도구</b> — 선택 · 화면 이동 · 출발점 · 목표 · 박스 · 기둥 · 단차 · 의자 · 보행자 · 지우개</span></li><li><span><b>레이어</b> — 전역·지역 costmap, 라이다 점, 센서 측정, 인식 결과, 경로, 지나온 궤적, 격자. 오른쪽 끝 버튼은 맵 전체 보기</span></li><li><span><b>주행 막대</b> — 동시 실행 개수(1~4) · 주행(현재 목표로 다시 보내기) · 정지 · 출발점으로 · 로봇 따라가기 · 장애물 모두 지우기</span></li><li><span><b>주행 상태</b> — 대기 / 주행 중 / 도착 / 실패, 남은 거리, 복구 동작 횟수, 아래에 속도·이격 그래프와 이번 주행 기록</span></li><li><span><b>Nav2 메시지</b> — Nav2 노드의 경고·오류를 실시간으로 보여 줍니다. “실행 로그” 는 전체 출력</span></li></ol>
   <p class="note">지도 조작: 휠로 확대·축소, 빈 곳을 끌면 이동합니다. 출발점 <b>S</b> 는 초록 원, 목표는 분홍 깃발, 파란 선은 계획 경로, 청록 선은 실제로 지나온 궤적입니다.</p>
 </section>
-<section data-n="5 / 12" class="page">
+<section data-n="5 / 14" class="page">
   <header class="ph"><span>04</span>시뮬레이션 따라하기</header>
   <ol class="steps compact">
-    <li><b>맵 고르기</b> — 왼쪽 <b>맵</b> 탭에서 맵 카드를 누릅니다 (내 맵은 <b>맵 추가</b> 로, 10쪽). 아래 시나리오 목록에서 미리 만든 상황(정상 · 미등록 장애물 · 보행자)을 불러올 수도 있습니다.</li>
+    <li><b>맵 고르기</b> — 왼쪽 <b>맵</b> 탭에서 맵 카드를 누릅니다 (내 맵은 <b>맵 추가</b> 로, 12장). 아래 시나리오 목록에서 미리 만든 상황(정상 · 미등록 장애물 · 보행자 · 낮은·공중 장애물 · 단차)을 불러올 수도 있습니다.</li>
     <li><b>시작</b> — 오른쪽 위 <b>시뮬레이션 시작</b>. 약 4초 뒤 “실행 중” 이 됩니다. 차량형 로봇은 약 12초 걸립니다.</li>
     <li><b>출발점</b> — 출발점 도구(<kbd>S</kbd>)로 지도를 누른 채 끌면 로봇이 그 자리·방향으로 옮겨집니다.</li>
     <li><b>목표</b> — 목표 도구(<kbd>G</kbd>)로 누른 채 끌어 도착 방향을 정하면 바로 출발합니다.</li>
-    <li><b>장애물 놓기</b> — 아래 도구로 주행 중에도 놓을 수 있습니다. 맵에는 없고 라이다에만 보이는 물체라서, 지도에 없는 짐이나 사람을 만난 상황을 재현합니다.</li>
+    <li><b>장애물 놓기</b> — 아래 도구로 주행 중에도 놓을 수 있습니다. 맵에 없는 물체라서, 지도에 없는 짐이나 사람·턱·단차를 만난 상황을 재현합니다.</li>
     <li><b>지켜보기</b> — 오른쪽 패널의 상태가 “도착” 이 되면 성공입니다. 실패하면 Nav2 메시지에서 이유를 확인합니다.</li>
   </ol>
   <figure class="shot"><div class="frame"><img src="img/sim_tools.png" alt=""><span class="ring" style="left:27.36%;top:12.89%;width:20.83%;height:22.44%"></span><span class="num" style="left:48.19%;top:12.89%">1</span></div><figcaption>박스(주황), 의자 다리 4개, 왕복하는 보행자(보라)를 놓은 장면. 보행자 도구를 고르면 속도·크기 옵션이 나타납니다 ①.</figcaption></figure>
   <table class="tbl tools">
     <tr><th>도구</th><th>키</th><th>사용법</th></tr>
     <tr><td>선택</td><td><kbd>V</kbd></td><td>장애물을 끌어 옮기고 <kbd>Delete</kbd> 로 지웁니다. 빈 곳을 끌면 화면 이동</td></tr>
-    <tr><td>박스</td><td><kbd>B</kbd></td><td>끌어서 사각형 장애물을 그립니다</td></tr>
-    <tr><td>기둥</td><td><kbd>P</kbd></td><td>누르는 곳에 원기둥. 반지름은 옵션에서</td></tr>
+    <tr><td>박스</td><td><kbd>B</kbd></td><td>끌어서 사각형 장애물을 그립니다. 옵션에서 높이(일반 · 낮은 턱 · 문턱 · 공중, 9장)</td></tr>
+    <tr><td>기둥</td><td><kbd>P</kbd></td><td>누르는 곳에 원기둥. 반지름·높이는 옵션에서</td></tr>
+    <tr><td>단차</td><td><kbd>D</kbd></td><td>끌어서 바닥이 꺼진 곳(계단·낭떠러지)을 그립니다. 깊이는 옵션에서</td></tr>
     <tr><td>의자</td><td><kbd>C</kbd></td><td>지름 5 cm 다리 4개. 2D 라이다로는 잘 안 보이는 대표적인 장애물</td></tr>
     <tr><td>보행자</td><td><kbd>W</kbd></td><td>시작점·끝점을 누르면 그 사이를 왕복합니다. 로봇 앞에서는 멈춰 양보합니다</td></tr>
     <tr><td>지우개</td><td><kbd>E</kbd></td><td>장애물이나 보행자 경로를 눌러 지웁니다. <kbd>Esc</kbd> 는 그리던 것 취소</td></tr>
   </table>
 </section>
-<section data-n="6 / 12" class="page">
+<section data-n="6 / 14" class="page">
   <header class="ph"><span>05</span>파라미터와 설정 세트</header>
-  <figure class="shot"><div class="frame"><img src="img/params.png" alt=""><span class="ring" style="left:0.83%;top:12.39%;width:21.18%;height:6.00%"></span><span class="num" style="left:11.42%;top:12.39%">1</span><span class="ring" style="left:0.90%;top:29.06%;width:21.04%;height:9.75%"></span><span class="num" style="left:2.50%;top:29.06%">2</span><span class="num" style="left:86.28%;top:4.62%">3</span></div></figure><ol class="legend"><li><span><b>설정 세트</b> — 지금 쓰는 세트 이름. 값을 바꾸면 “(수정됨)” 이 붙습니다. 저장 버튼으로 이름 붙여 저장합니다</span></li><li><span><b>바꾼 항목</b> — 파란 배경과 점으로 표시됩니다. 오른쪽 되돌리기 버튼으로 기본값 복원. 아래 회색 글씨는 실제 Nav2 파라미터 경로</span></li><li><span><b>변경 적용 (재시작)</b> — 누르면 같은 장면으로 Nav2 를 다시 띄웁니다 (약 4초)</span></li></ol>
+  <figure class="shot"><div class="frame"><img src="img/params.png" alt=""><span class="ring" style="left:0.83%;top:12.39%;width:21.18%;height:6.00%"></span><span class="num" style="left:11.42%;top:12.39%">1</span><span class="ring" style="left:0.90%;top:29.06%;width:21.04%;height:9.75%"></span><span class="num" style="left:2.50%;top:29.06%">2</span><span class="num" style="left:82.54%;top:4.62%">3</span></div></figure><ol class="legend"><li><span><b>설정 세트</b> — 지금 쓰는 세트 이름. 값을 바꾸면 “(수정됨)” 이 붙습니다. 저장 버튼으로 이름 붙여 저장합니다</span></li><li><span><b>바꾼 항목</b> — 파란 배경과 점으로 표시됩니다. 오른쪽 되돌리기 버튼으로 기본값 복원. 아래 회색 글씨는 실제 Nav2 파라미터 경로</span></li><li><span><b>변경 적용 (재시작)</b> — 누르면 같은 장면으로 Nav2 를 다시 띄웁니다 (약 4초)</span></li></ol>
   <div class="cols">
     <div>
       <h3>항목 구성</h3>
@@ -192,10 +194,10 @@ navstudio                    # 서버를 띄우고 브라우저를 엽니다</pr
     </div>
   </div>
 </section>
-<section data-n="7 / 12" class="page">
+<section data-n="7 / 14" class="page">
   <header class="ph"><span>06</span>동시 실행 비교</header>
-  <p>설정 여러 개를 한 화면에서 나란히 돌려 봅니다. 맵 · 로봇 · 장면은 모든 슬롯이 같이 쓰고, 슬롯마다 스택과 파라미터가 다릅니다.</p>
-  <figure class="shot"><div class="frame"><img src="img/sim_compare.png" alt=""><span class="num" style="left:28.82%;top:94.47%">1</span><span class="ring" style="left:51.81%;top:12.78%;width:26.32%;height:3.78%"></span><span class="num" style="left:51.81%;top:16.56%">2</span><span class="num" style="left:69.52%;top:16.11%">3</span><span class="num" style="left:74.59%;top:16.11%">4</span><span class="num" style="left:85.31%;top:4.62%">5</span><span class="num" style="left:38.21%;top:94.33%">6</span><span class="ring" style="left:79.24%;top:5.78%;width:20.76%;height:96.97%"></span><span class="num" style="left:79.24%;top:54.26%">7</span><span class="num" style="left:22.01%;top:15.33%">8</span></div></figure><ol class="legend two"><li><span><b>동시 실행 개수</b> — 1~4. 슬롯 A–D 는 색으로 구분됩니다. 슬롯 하나가 CPU 약 1코어를 씁니다</span></li><li><span><b>슬롯 머리글</b> — 설정 이름을 누르면 설정 세트·스택 기본값을 고르는 메뉴. 옆은 상태(꺼짐 / 시작 중 / 실행 중 / 변경됨 / 오류)</span></li><li><span><b>슬롯 시작 · 끄기</b> — 그 슬롯만 시작·재시작(설정을 바꿨으면 변경 적용)·끄기</span></li><li><span><b>슬롯 주행</b> — 깃발: 그 슬롯만 출발점에서 다시 주행 · 네모: 그 슬롯 주행 멈춤</span></li><li><span><b>모두 시작</b> — 꺼져 있거나 설정이 바뀐 슬롯을 2초 간격으로 띄웁니다. 모두 실행 중이면 모두 재시작</span></li><li><span><b>동시 출발</b> — 로봇을 모두 출발점에, 보행자를 처음 자리에 되돌린 뒤 같은 순간에 출발. 목표를 찍어도 같습니다</span></li><li><span><b>비교 패널</b> — 슬롯별 상태, 속도·이격 그래프, 이번 주행 비교표. 모두 도착하면 항목마다 가장 좋은 값이 초록</span></li><li><span><b>편집 중인 슬롯</b> — 화면을 누르거나 1~4 키로 고릅니다. 왼쪽 스택·파라미터 탭이 이 슬롯을 바꿉니다</span></li></ol>
+  <p>설정 여러 개를 한 화면에서 나란히 돌려 봅니다. 맵과 장면은 모든 슬롯이 같이 쓰고, 슬롯마다 스택과 파라미터가 다릅니다. 센서 배치를 비교하려면 슬롯마다 로봇도 바꿀 수 있습니다.</p>
+  <figure class="shot"><div class="frame"><img src="img/sim_compare.png" alt=""><span class="num" style="left:28.82%;top:94.47%">1</span><span class="ring" style="left:51.81%;top:12.78%;width:26.32%;height:3.78%"></span><span class="num" style="left:51.81%;top:16.56%">2</span><span class="num" style="left:69.52%;top:16.11%">3</span><span class="num" style="left:74.59%;top:16.11%">4</span><span class="num" style="left:85.31%;top:4.62%">5</span><span class="num" style="left:38.21%;top:94.33%">6</span><span class="ring" style="left:79.24%;top:5.78%;width:20.76%;height:99.97%"></span><span class="num" style="left:79.24%;top:55.77%">7</span><span class="num" style="left:22.01%;top:15.33%">8</span></div></figure><ol class="legend two"><li><span><b>동시 실행 개수</b> — 1~4. 슬롯 A–D 는 색으로 구분됩니다. 슬롯 하나가 CPU 약 1코어를 씁니다</span></li><li><span><b>슬롯 머리글</b> — 설정 이름을 누르면 설정 세트·스택 기본값·슬롯 로봇을 고르는 메뉴. 옆은 상태(꺼짐 / 시작 중 / 실행 중 / 변경됨 / 오류)</span></li><li><span><b>슬롯 시작 · 끄기</b> — 그 슬롯만 시작·재시작(설정을 바꿨으면 변경 적용)·끄기</span></li><li><span><b>슬롯 주행</b> — 깃발: 그 슬롯만 출발점에서 다시 주행 · 네모: 그 슬롯 주행 멈춤</span></li><li><span><b>모두 시작</b> — 꺼져 있거나 설정이 바뀐 슬롯을 2초 간격으로 띄웁니다. 모두 실행 중이면 모두 재시작</span></li><li><span><b>동시 출발</b> — 로봇을 모두 출발점에, 보행자를 처음 자리에 되돌린 뒤 같은 순간에 출발. 목표를 찍어도 같습니다</span></li><li><span><b>비교 패널</b> — 슬롯별 상태, 속도·이격 그래프, 이번 주행 비교표. 모두 도착하면 항목마다 가장 좋은 값이 초록</span></li><li><span><b>편집 중인 슬롯</b> — 화면을 누르거나 1~4 키로 고릅니다. 왼쪽 스택·파라미터 탭이 이 슬롯을 바꿉니다</span></li></ol>
   <div class="cols">
     <div>
       <h3>따라하기</h3>
@@ -206,12 +208,12 @@ navstudio                    # 서버를 띄우고 브라우저를 엽니다</pr
         <li>다른 슬롯의 궤적이 흐린 색으로 겹쳐 보입니다. 한 번의 주행에는 우연이 섞이므로, 차이가 작으면 <b>이 설정들로 벤치마크</b> 로 여러 시나리오에서 확인합니다.</li>
       </ol>
     </div>
-    <div><figure class="shot small"><div class="frame"><img src="img/slot_menu.png" alt=""></div><figcaption>슬롯 머리글 메뉴: 설정 세트, 스택 기본값, 다른 슬롯 설정 복사, 파라미터 직접 편집.</figcaption></figure></div>
+    <div><figure class="shot small"><div class="frame"><img src="img/slot_menu.png" alt=""></div><figcaption>슬롯 머리글 메뉴: 설정 세트, 스택 기본값, 다른 슬롯 설정 복사, 파라미터 직접 편집, 이 슬롯만 쓸 로봇.</figcaption></figure></div>
   </div>
 </section>
-<section data-n="8 / 12" class="page">
+<section data-n="8 / 14" class="page">
   <header class="ph"><span>07</span>로봇 설계</header>
-  <figure class="shot"><div class="frame"><img src="img/robot.png" alt=""><span class="num" style="left:25.00%;top:52.89%">1</span><span class="num" style="left:24.09%;top:32.33%">2</span><span class="num" style="left:25.83%;top:11.55%">3</span><span class="num" style="left:49.30%;top:52.89%">4</span><span class="num" style="left:73.68%;top:39.95%">5</span><span class="num" style="left:73.68%;top:87.05%">6</span></div></figure><ol class="legend two"><li><span><b>제원 입력</b> — 이름, 차체 색·높이, 바퀴, 물리 한계(최대 속도·가속), 구동계 지연·슬립, 라이다 목록</span></li><li><span><b>구동 방식</b> — 차동 구동 · 전방향(메카넘) · 차량형(Ackermann). 차량형은 축거와 최대 조향각으로 최소 회전반경이 정해집니다</span></li><li><span><b>편집 옵션</b> — 5 mm 스냅, 좌우 대칭 편집(꼭짓점 하나를 옮기면 반대쪽도 같이), 치수 표시, 맞춤 보기</span></li><li><span><b>상면도 편집기</b> — 네모 핸들(꼭짓점)을 끌어 외곽을 바꾸고, 변을 더블클릭하면 꼭짓점 추가, 우클릭하면 삭제. 라이다는 점을 끌어 옮기고 부채꼴 끝의 원을 끌어 방향을 돌립니다</span></li><li><span><b>3D 미리보기</b> — 끌어서 회전, 휠로 확대. 바퀴·라이다·시야 범위를 입체로 확인</span></li><li><span><b>계산값</b> — 내접·외접원, Nav2 footprint, 최소 회전반경, 통과 가능한 최소 폭</span></li></ol>
+  <figure class="shot"><div class="frame"><img src="img/robot.png" alt=""><span class="num" style="left:25.00%;top:52.89%">1</span><span class="num" style="left:24.30%;top:32.33%">2</span><span class="num" style="left:25.83%;top:12.22%">3</span><span class="num" style="left:49.30%;top:52.89%">4</span><span class="num" style="left:73.68%;top:39.95%">5</span><span class="num" style="left:73.68%;top:87.05%">6</span></div></figure><ol class="legend two"><li><span><b>제원 입력</b> — 이름, 차체 색·높이, 바퀴, 물리 한계(최대 속도·가속), 구동계 지연·슬립, 라이다 목록</span></li><li><span><b>구동 방식</b> — 차동 구동 · 전방향(메카넘) · 차량형(Ackermann). 차량형은 축거와 최대 조향각으로 최소 회전반경이 정해집니다</span></li><li><span><b>편집 옵션</b> — 5 mm 스냅, 좌우 대칭 편집(꼭짓점 하나를 옮기면 반대쪽도 같이), 치수 표시, 맞춤 보기</span></li><li><span><b>상면도 편집기</b> — 네모 핸들(꼭짓점)을 끌어 외곽을 바꾸고, 변을 더블클릭하면 꼭짓점 추가, 우클릭하면 삭제. 라이다는 점을 끌어 옮기고 부채꼴 끝의 원을 끌어 방향을 돌립니다</span></li><li><span><b>3D 미리보기</b> — 끌어서 회전, 휠로 확대. 바퀴·라이다·시야 범위를 입체로 확인</span></li><li><span><b>계산값</b> — 내접·외접원, Nav2 footprint, 최소 회전반경, 통과 가능한 최소 폭</span></li></ol>
   <div class="cols">
     <div>
       <h3>구동 방식과 주행 스택</h3>
@@ -225,8 +227,47 @@ navstudio                    # 서버를 띄우고 브라우저를 엽니다</pr
     <div><figure class="shot small"><div class="frame"><img src="img/robot_ackermann.png" alt=""></div><figcaption>차량형 카트 예: 뒷바퀴 축이 원점, 앞바퀴 조향과 최소 회전반경 원(파란 점선)이 표시됩니다.</figcaption></figure></div>
   </div>
 </section>
-<section data-n="9 / 12" class="page">
-  <header class="ph"><span>08</span>벤치마크</header>
+<section data-n="9 / 14" class="page">
+  <header class="ph"><span>08</span>센서 설계</header>
+  <p>로봇에 2D 라이다 말고도 ToF(단일 · 멀티존), 초음파, Depth 카메라를 달 수 있습니다. 센서는 <b>센서 라이브러리</b> 의 모델(종류 + 사양)을 골라 달고, 로봇 위의 위치와 각도를 정합니다.</p>
+  <figure class="shot"><div class="frame"><img src="img/robot_sensors.png" alt=""><span class="num" style="left:21.03%;top:17.67%">1</span><span class="ring" style="left:0.83%;top:64.89%;width:23.47%;height:106.94%"></span><span class="num" style="left:24.30%;top:64.89%">2</span><span class="num" style="left:23.68%;top:96.50%">3</span><span class="num" style="left:30.55%;top:11.67%">4</span><span class="num" style="left:49.30%;top:52.89%">5</span><span class="num" style="left:73.68%;top:33.85%">6</span></div></figure><ol class="legend two"><li><span><b>라이브러리 · 센서 추가</b> — 라이브러리에서 센서 모델을 만들고 고칩니다. 센서 추가로 모델을 골라 로봇에 답니다</span></li><li><span><b>센서 카드</b> — 이름, 모델, 켜기/끄기, 위치 x·y·높이 z, 방향 roll·pitch(+ 가 아래)·yaw. ⋯ 메뉴: 복제, 좌우 대칭 복제, 라이브러리 값으로 되돌리기</span></li><li><span><b>센서 사양</b> — 주기·거리·잡음·시야·해상도. 멀티존 ToF 는 존 마스크(쓰는 존만 켜기)</span></li><li><span><b>위에서 / 옆에서</b> — 옆에서 보면 높이와 pitch 를 끌어 맞추고, 아래 광선이 바닥에 닿는 거리가 나옵니다</span></li><li><span><b>편집기</b> — 라이다는 부채꼴, 3D 센서는 시야가 바닥에 닿는 범위(점선)와 존마다 보는 곳(점). 센서를 끌어 옮기고 끝의 원으로 방향을 돌립니다</span></li><li><span><b>3D 미리보기</b> — 센서 상자와 시야 범위, 멀티존 ToF 의 존 광선</span></li></ol>
+  <div class="cols">
+    <div><figure class="shot small"><div class="frame"><img src="img/robot_side.png" alt=""></div><figcaption>옆에서 본 모습: 좌우 멀티존 ToF(아래쪽 광선이 0.25 m 앞 바닥), Depth 카메라, 위쪽 1D ToF, 앞뒤 라이다(가로선).</figcaption></figure></div>
+    <div>
+      <table class="tbl">
+        <tr><th>라이다 병합</th><td>라이다가 둘 이상이면 고른 라이다를 360° <code>/scan</code> 하나로 합칩니다 (각 라이다는 <code>/scan_이름</code> 으로도 나감)</td></tr>
+        <tr><th>인식 처리</th><td><b>규칙 기반 인식</b>(권장): 높이·단차 규칙으로 걸러 여러 프레임 확인 후 costmap 에 올림 · <b>원시 점</b>: 점구름을 그대로 · <b>끔</b>: 발행만</td></tr>
+        <tr><th>등반 높이</th><td>이보다 낮은 턱은 넘어갑니다. 차체 높이보다 높이 뜬 장애물은 아래로 지나갑니다</td></tr>
+      </table>
+      <p class="note">기본 로봇 <b>Everybot 홈 로봇</b> 에 앞뒤 240° 라이다(병합), 좌우 멀티존 ToF 8×8, 위쪽 1D ToF, Depth 카메라가 달려 있습니다. 새 센서 <b>종류</b> 는 파이썬 파일 하나로 추가합니다 (라이브러리의 <b>템플릿 만들기</b>, 저장소의 <code>docs/SENSORS.md</code>).</p>
+    </div>
+  </div>
+</section>
+<section data-n="10 / 14" class="page">
+  <header class="ph"><span>09</span>낮은 장애물과 단차</header>
+  <p>2D 라이다는 자기 높이에 걸리는 것만 봅니다. 5 cm 턱, 테이블 상판, 계단 같은 단차는 바닥을 보는 센서와 인식 처리가 있어야 피합니다.</p>
+  <figure class="shot"><div class="frame"><img src="img/sim_sensors.png" alt=""><span class="num" style="left:26.60%;top:37.00%">1</span><span class="ring" style="left:27.36%;top:12.89%;width:20.83%;height:24.72%"></span><span class="num" style="left:48.19%;top:12.89%">2</span><span class="num" style="left:30.26%;top:11.33%">3</span><span class="num" style="left:48.02%;top:43.85%">4</span><span class="num" style="left:55.57%;top:37.37%">4</span><span class="ring" style="left:80.07%;top:69.81%;width:19.10%;height:66.83%"></span><span class="num" style="left:80.07%;top:69.81%">5</span></div></figure><ol class="legend two"><li><span><b>단차 도구</b> — 끌어서 바닥이 꺼진 곳을 그립니다 (빗금). 깊이는 옵션에서. 로봇 중심이 들어가면 떨어져 멈춥니다(낙하)</span></li><li><span><b>박스 높이</b> — 일반(0~1 m) · 낮은 턱(5 cm) · 문턱(1.5 cm) · 공중(0.65~0.75 m) 또는 아래·위 높이 직접 입력. 선택 도구로 고른 장애물도 바꿉니다</span></li><li><span><b>레이어</b> — 센서 측정(센서 색 점, 바닥에 맞은 점은 흐리게) · 인식 결과(확정 장애물 노란 사각형, 단차 ×)</span></li><li><span><b>지도</b> — 5 cm 턱(노란 사각형 = 확정된 인식 결과)이 costmap 에 올라 로봇이 돌아가고, 단차 가장자리에는 × 가 찍힙니다. 아래쪽 공중 장애물(0.70~0.75 m)은 차체보다 높아 그 아래로 지나갑니다</span></li><li><span><b>센서 · 인식</b> — ToF 존 히트맵(센서 뒤에서 본 모습, 빨강 = 가까움), Depth 축소 영상, 1D 거리 막대, 확정 개수, 인식 지우기</span></li></ol>
+  <div class="cols">
+    <div>
+      <h3>인식 규칙 (요약)</h3>
+      <ul class="dots">
+        <li><b>장애물</b>: 바닥 위 2 cm ~ 차체+5 cm 에 맞은 점, 위아래 존이 같은 면을 맞힘</li>
+        <li><b>단차</b>: 바닥이 보여야 할 존의 거리가 8 cm 이상 길거나 반사가 없음, 바닥보다 3 cm 이상 낮은 점</li>
+        <li>라이다가 이미 본 곳은 빼고, 2 프레임 연속이면 확정. 바닥이 다시 보이면 지움</li>
+      </ul>
+    </div>
+    <div>
+      <h3>비교와 조정</h3>
+      <ul class="dots">
+        <li>임계값: <b>파라미터 → 센서 인식</b> (센서가 있는 로봇에서만 보임)</li>
+        <li>센서 배치 비교: 동시 실행 슬롯 머리글 메뉴의 <b>슬롯 로봇</b></li>
+        <li>벤치마크 시나리오 <b>낮은·공중 장애물</b>, <b>단차</b> · 낙하는 실패로 셉니다</li>
+      </ul>
+    </div>
+  </div>
+</section>
+<section data-n="11 / 14" class="page">
+  <header class="ph"><span>10</span>벤치마크</header>
   <p>설정 여러 개를 같은 시나리오로 반복 주행해 어느 쪽이 나은지 숫자로 비교합니다. 파라미터를 바꾼 효과가 우연인지 확인할 때 씁니다.</p>
   <ol class="steps compact">
     <li><b>새 벤치마크</b> → 비교할 설정을 추가합니다 (현재 설정, <b>설정 세트·스택</b>, 동시 실행 중인 슬롯 전체). 첫 번째가 비교 기준입니다.</li>
@@ -247,8 +288,8 @@ navstudio                    # 서버를 띄우고 브라우저를 엽니다</pr
     <div><figure class="shot small"><div class="frame"><img src="img/replay.png" alt=""></div><figcaption>에피소드 재생: 계획 경로, 지나온 궤적, 장애물과 보행자를 시간 순서대로 봅니다.</figcaption></figure></div>
   </div>
 </section>
-<section data-n="10 / 12" class="page">
-  <header class="ph"><span>09</span>자동 튜닝</header>
+<section data-n="12 / 14" class="page">
+  <header class="ph"><span>11</span>자동 튜닝</header>
   <p>고른 파라미터들의 범위 안에서 Optuna(TPE)가 조합을 바꿔 가며 시나리오를 주행하고, 점수가 높은 조합을 찾습니다.</p>
   <div class="cols">
     <div>
@@ -266,8 +307,8 @@ navstudio                    # 서버를 띄우고 브라우저를 엽니다</pr
   <figure class="shot"><div class="frame"><img src="img/tune_result.png" alt=""></div><figcaption>튜닝 결과: 최고 trial 의 점수와 지표를 기준과 비교하고, 파라미터 값과 점수 추이를 보여 줍니다.</figcaption></figure>
   <p class="warn"><b>적용 전에 검증하세요.</b> 튜닝 점수는 튜닝에 쓴 시나리오에서만 잰 값이라 우연히 좋게 나올 수 있습니다. <b>검증 벤치마크</b> 를 누르면 기준과 최고 설정을 튜닝에 쓰지 않은 맵에서 비교합니다. 결과가 좋으면 <b>시뮬레이션에 적용</b> 으로 값을 옮기거나 <b>설정 세트로 저장</b> 해 동시 실행·벤치마크에서 씁니다.</p>
 </section>
-<section data-n="11 / 12" class="page">
-  <header class="ph"><span>10</span>맵 추가와 관리</header>
+<section data-n="13 / 14" class="page">
+  <header class="ph"><span>12</span>맵 추가와 관리</header>
   <p>기본 맵 4종 외에 ROS map_server 형식의 맵을 추가해 씁니다. 현장 맵처럼 저장소에 넣지 않는 맵도 각자 PC 에 추가하면 됩니다.</p>
   <div class="cols">
     <div><figure class="shot small"><div class="frame"><img src="img/map_add.png" alt=""></div><figcaption>맵 추가 창: 파일을 끌어다 놓거나 눌러서 고릅니다. 맵이 하나면 표시 이름을 정할 수 있습니다.</figcaption></figure></div>
@@ -305,8 +346,8 @@ navstudio maps remove site_a</pre>
     <tr><th>Docker</th><td><code>navstudio-data</code> 볼륨의 <code>/data</code> (위와 같은 폴더 구성)</td></tr>
   </table>
 </section>
-<section data-n="12 / 12" class="page">
-  <header class="ph"><span>11</span>문제 해결</header>
+<section data-n="14 / 14" class="page">
+  <header class="ph"><span>13</span>문제 해결</header>
   <h3>자주 묻는 것</h3>
   <table class="tbl faq">
     <tr><th>시작을 눌렀는데 “오류” 가 뜬다</th><td>오류 상자의 <b>로그 보기</b> 나 오른쪽 아래 <b>실행 로그</b> 에서 첫 ERROR 줄을 확인합니다. 고급 오버라이드에 잘못된 값을 넣었을 때 흔합니다. <b>모두 초기화</b> 후 다시 시작해 보세요.</td></tr>
@@ -316,14 +357,15 @@ navstudio maps remove site_a</pre>
     <tr><th>동시 실행에서 한 슬롯만 “오류”</th><td>그 화면의 <b>로그 보기</b> 에서 첫 ERROR 줄을 확인하고 <b>다시 시작</b> 합니다. 다른 슬롯은 영향을 받지 않습니다. 기동이 30초 안에 끝나지 않으면 한 번은 자동으로 다시 띄웁니다.</td></tr>
     <tr><th>슬롯을 여러 개 띄우니 움직임이 이상하다</th><td>슬롯 하나가 CPU 약 1코어를 씁니다. 코어가 부족하면 Nav2 제어 주기가 밀려 결과가 달라집니다. 개수를 줄이거나 벤치마크를 같이 돌리지 마세요.</td></tr>
     <tr><th>벤치마크가 느리다</th><td>Nav2 는 실시간으로만 돌아서 에피소드당 20~60초가 걸립니다. 동시 실행 수를 CPU 코어 수의 절반 정도까지 올리세요.</td></tr>
+    <tr><th>낮은 장애물에 부딪히거나 단차에 떨어진다</th><td>로봇에 바닥 가까이를 보는 센서(ToF·Depth)가 있고 <b>인식 처리</b> 가 ‘규칙 기반 인식’ 인지 확인합니다. 센서를 <b>옆에서</b> 보기로 맞춰 아래 광선이 로봇 앞 0.2~0.4 m 바닥에 닿게 하고, 인식 결과 레이어에 점이 찍히는지 봅니다.</td></tr>
     <tr><th>포트 8765 를 이미 쓴다</th><td><code>navstudio --port 8780</code>, Docker 는 compose.yml 의 <code>ports</code> 를 <code>"127.0.0.1:8780:8765"</code> 로 바꾸고 <code>http://localhost:8780</code> 으로 엽니다.</td></tr>
   </table>
   <h3>알아 둘 한계</h3>
   <ul class="dots">
-    <li>2D 시뮬레이션입니다. 3D 센서, 높이가 있는 장애물, 바닥 재질, 배터리는 다루지 않습니다.</li>
+    <li>2.5D 시뮬레이션입니다. 장애물은 바닥 모양 + 높이 구간, 단차는 수직으로 꺼진 사각형입니다. 경사로·바닥 재질·RGB 영상·배터리는 다루지 않습니다.</li>
     <li>위치 추정은 정확하다고 가정합니다. 오도메트리 미끄러짐은 넣었지만 위치 추정 오차는 없습니다.</li>
     <li>보행자는 정해진 경로를 왕복하는 단순 모델입니다.</li>
     <li>실제 로봇의 저수준 안전 동작은 포함하지 않습니다. 결과는 설정 간 비교로 읽고, 최종 판단은 실제 로봇 시험으로 합니다.</li>
   </ul>
-  <div class="end">Nav Studio · Everybot · 버전 0.2.0</div>
+  <div class="end">Nav Studio · Everybot · 버전 0.3.0</div>
 </section></body></html>

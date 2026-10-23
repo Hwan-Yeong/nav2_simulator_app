@@ -19,6 +19,7 @@ Summary for the UI:
 """
 import math
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -27,12 +28,12 @@ from .sensortypes.geometry import mount_pose
 from .sim.raycast import Scene3D
 
 PROBES = {
-    'low': dict(kind='box', size=0.10, z0=0.0, z1=0.05, label='낮은 턱 5 cm'),
-    'threshold': dict(kind='box', size=0.10, z0=0.0, z1=0.015, label='문턱 1.5 cm'),
-    'overhang': dict(kind='box', size=0.30, z0=0.25, z1=0.30, label='공중 25~30 cm'),
-    'leg': dict(kind='pole', size=0.05, z0=0.0, z1=0.45, label='의자 다리 지름 5 cm'),
-    'box': dict(kind='box', size=0.30, z0=0.0, z1=1.0, label='박스 30 cm'),
-    'drop': dict(kind='drop', size=0.30, depth=0.10, label='단차 깊이 10 cm'),
+    'low': dict(kind='box', size=0.10, z0=0.0, z1=0.05, short='낮은 턱', label='낮은 턱 (10 cm 상자, 높이 5 cm)'),
+    'threshold': dict(kind='box', size=0.10, z0=0.0, z1=0.015, short='문턱', label='문턱 (높이 1.5 cm)'),
+    'overhang': dict(kind='box', size=0.30, z0=0.25, z1=0.30, short='공중', label='공중 장애물 (바닥 위 25~30 cm, 선반·침대 프레임)'),
+    'leg': dict(kind='pole', size=0.05, z0=0.0, z1=0.45, short='의자 다리', label='의자 다리 (지름 5 cm, 높이 45 cm)'),
+    'box': dict(kind='box', size=0.30, z0=0.0, z1=1.0, short='박스', label='박스 (30 cm, 높이 1 m)'),
+    'drop': dict(kind='drop', size=0.30, depth=0.10, short='단차', label='단차 (30 cm 구멍, 깊이 10 cm)'),
 }
 REACTION_S = 0.1          # sensor + costmap update, on top of the perception confirmation time
 MAX_CELLS = 40000
@@ -42,7 +43,7 @@ def probe_spec(p):
     """A probe from a preset id and/or explicit fields -> validated dict."""
     p = dict(p or {})
     base = dict(PROBES.get(p.get('preset') or 'low', PROBES['low']))
-    base.update({k: v for k, v in p.items() if k in ('kind', 'size', 'z0', 'z1', 'depth', 'label') and v is not None})
+    base.update({k: v for k, v in p.items() if k in ('kind', 'size', 'z0', 'z1', 'depth') and v is not None})
     if base['kind'] not in ('box', 'pole', 'drop'):
         raise ValueError(f"알 수 없는 물체 종류: {base['kind']}")
     base['size'] = float(base['size'])
@@ -178,6 +179,47 @@ def _candidate_cells(probe, o, d, t_floor, rmax, xs, ys, res):
     return mask
 
 
+def _probe_hits(probe, o, d, t_floor, cx, cy):
+    """Distance along each ray (n) for a probe on each of the cells cx, cy (m): (n, m), the floor included."""
+    h = probe['size'] / 2
+    inv = np.empty_like(d)
+    with np.errstate(divide='ignore', invalid='ignore', over='ignore'):
+        inv[:] = 1.0 / d
+        if probe['kind'] == 'drop':
+            # ray reaches the floor inside the hole -> goes on to the hole's floor or its far side wall
+            tf = np.where(np.isfinite(t_floor), t_floor, 0.0)
+            fx, fy = (o[0] + d[:, 0] * tf)[:, None], (o[1] + d[:, 1] * tf)[:, None]
+            inside = np.isfinite(t_floor)[:, None] & (np.abs(fx - cx) <= h) & (np.abs(fy - cy) <= h)
+            t_low = ((-probe['depth'] - o[2]) * inv[:, 2])[:, None]
+            ex = np.where(d[:, 0:1] > 0, cx + h - o[0], cx - h - o[0]) * inv[:, 0:1]
+            ey = np.where(d[:, 1:2] > 0, cy + h - o[1], cy - h - o[1]) * inv[:, 1:2]
+            t_exit = np.fmin(np.where(np.isfinite(ex), ex, np.inf), np.where(np.isfinite(ey), ey, np.inf))
+            return np.where(inside, np.minimum(t_low, t_exit), t_floor[:, None])
+        if probe['kind'] == 'pole':
+            ox, oy = o[0] - cx, o[1] - cy                                    # (m,)
+            dx, dy, dz = d[:, 0:1], d[:, 1:2], d[:, 2:3]
+            a = dx * dx + dy * dy
+            b = 2 * (ox * dx + oy * dy)
+            cc = ox * ox + oy * oy - h * h
+            disc = b * b - 4 * a * cc
+            sq = np.sqrt(np.where(disc >= 0, disc, 0))
+            ts = np.where((disc >= 0) & (a > 1e-12), (-b - sq) / (2 * a), np.inf)
+            zs = o[2] + dz * ts
+            t = np.where((ts > 0) & (zs >= probe['z0']) & (zs <= probe['z1']), ts, np.inf)
+            for zc in (probe['z0'], probe['z1']):
+                tc = (zc - o[2]) * inv[:, 2:3]
+                px, py = ox + dx * tc, oy + dy * tc
+                t = np.where((tc > 0) & np.isfinite(tc) & (px * px + py * py <= h * h) & (tc < t), tc, t)
+        else:
+            t1x, t2x = (cx - h - o[0]) * inv[:, 0:1], (cx + h - o[0]) * inv[:, 0:1]
+            t1y, t2y = (cy - h - o[1]) * inv[:, 1:2], (cy + h - o[1]) * inv[:, 1:2]
+            t1z, t2z = (probe['z0'] - o[2]) * inv[:, 2:3], (probe['z1'] - o[2]) * inv[:, 2:3]
+            tmin = np.fmax(np.fmax(np.fmin(t1x, t2x), np.fmin(t1y, t2y)), np.fmin(t1z, t2z))
+            tmax = np.fmin(np.fmin(np.fmax(t1x, t2x), np.fmax(t1y, t2y)), np.fmax(t1z, t2z))
+            t = np.where((tmax >= np.maximum(tmin, 0)) & (tmax > 0), np.maximum(tmin, 0), np.inf)
+    return np.minimum(t, t_floor[:, None])
+
+
 def _sensor_3d(s, probe, xs, ys, mode, cfg, inside):
     """Cells where a 3D sensor's data, through the perception rules (or raw points), shows the probe."""
     kind = sensortypes.get(s['type'])
@@ -190,7 +232,7 @@ def _sensor_3d(s, probe, xs, ys, mode, cfg, inside):
     t_floor = scene._floor(pos, d)
     cand = _candidate_cells(probe, pos, d, t_floor, rmax, xs, ys, xs[1] - xs[0]) & ~inside
     out = np.zeros(cand.shape, bool)
-    if mode == 'off':
+    if mode == 'off' or (probe['kind'] == 'drop' and mode == 'direct'):   # raw points never mark a drop
         return out, cand
     rng = np.random.default_rng(0)
     zones = kind.perception_input[0] == 'zones'
@@ -208,39 +250,36 @@ def _sensor_3d(s, probe, xs, ys, mode, cfg, inside):
         return near(np.asarray(ob, float).reshape(-1, 2)), near(np.asarray(dr, float).reshape(-1, 2))
 
     base_ob, base_dr = run(t_floor)
-    for iy, ix in zip(*np.nonzero(cand)):
-        cx, cy = xs[ix], ys[iy]
-        if probe['kind'] == 'drop':
-            if mode == 'direct':
-                continue                                   # raw points never mark a drop
-            scene.drops = np.array([[cx - probe['size'] / 2, cy - probe['size'] / 2, cx + probe['size'] / 2, cy + probe['size'] / 2, probe['depth']]])
-            t = scene._floor(pos, d)
-            scene.drops = np.zeros((0, 5))
-            _, pts = run(t)
-            base = base_dr
-        else:
-            h = probe['size'] / 2
-            if probe['kind'] == 'pole':
-                to = Scene3D._cylinders(pos, d, np.array([[cx, cy, h, probe['z0'], probe['z1']]]))
-            else:
-                to = Scene3D._boxes(pos, d, np.array([[cx, cy, h, h, 0.0, probe['z0'], probe['z1']]]))
-            pts, _ = run(np.minimum(t_floor, to))
-            base = base_ob
-        if not len(pts):
-            continue
-        hit = _probe_region(probe, cx, cy, margin)
-        out[iy, ix] = hit(pts[:, 0], pts[:, 1]).sum() > (hit(base[:, 0], base[:, 1]).sum() if len(base) else 0)
+    base = base_dr if probe['kind'] == 'drop' else base_ob
+    tf_cmp = np.where(t_floor <= rmax, t_floor, np.inf)
+    cells = np.argwhere(cand)
+    chunk = max(1, int(4e6 // max(len(d), 1)))
+    for k in range(0, len(cells), chunk):
+        part = cells[k:k + chunk]
+        cx, cy = xs[part[:, 1]], ys[part[:, 0]]
+        T = _probe_hits(probe, pos, d, t_floor, cx, cy)
+        T = np.where(T <= rmax, T, np.inf)
+        changed = (T != tf_cmp[:, None]).any(axis=0)            # rays that see something else than the bare floor
+        for c in np.nonzero(changed)[0]:
+            iy, ix = part[c]
+            ob, dr = run(T[:, c])
+            pts = dr if probe['kind'] == 'drop' else ob
+            if not len(pts):
+                continue
+            hit = _probe_region(probe, xs[ix], ys[iy], margin)
+            out[iy, ix] = hit(pts[:, 0], pts[:, 1]).sum() > (hit(base[:, 0], base[:, 1]).sum() if len(base) else 0)
     return out, cand
 
 
 # ------------------------------------------------------------------ main
-def compute(R, probe=None, extent=None, res=0.05, params=None):
-    """Coverage grid and summary for robot profile R (normalized here) and a probe (see PROBES)."""
+def compute(R, probe=None, extent=None, res=None, params=None):
+    """Coverage grid and summary for robot profile R (normalized here) and a probe (see PROBES).
+    res: grid step (default: a quarter of the probe size, 5~8 cm)"""
     t_start = time.monotonic()
     R = robotlib.normalize(R)
     probe = probe_spec(probe)
     cfg = perception_params(R, params)
-    res = float(min(max(res, 0.02), 0.2))
+    res = float(min(max(res if res else min(max(probe['size'] / 4, 0.05), 0.08), 0.02), 0.2))
     fp = _footprint(R)
     reach = max([fp['front'], fp['half_width']] + [math.hypot(s['x'], s['y']) for s in R['sensors']])
     if extent is None:
@@ -258,13 +297,14 @@ def compute(R, probe=None, extent=None, res=0.05, params=None):
     inside = dist < clear                       # the probe would overlap the robot (obstacles) / lie under it (drops)
     mode = R['perception']['mode']
     sensors, masks, notes = [], [], []
-    for s in R['sensors']:
-        if not s['enabled']:
-            continue
-        if s['type'] == 'lidar2d':
+    mounts = [s for s in R['sensors'] if s['enabled']]
+    with ThreadPoolExecutor(max_workers=min(4, max(1, len(mounts)))) as ex:     # numpy / cKDTree release the GIL
+        jobs = [None if s['type'] == 'lidar2d' else ex.submit(_sensor_3d, s, probe, xs, ys, mode, cfg, inside) for s in mounts]
+    for s, job in zip(mounts, jobs):
+        if job is None:
             det, used = _lidar(s, probe, X, Y) & ~inside, True
         else:
-            det, cand = _sensor_3d(s, probe, xs, ys, mode, cfg, inside)
+            det, cand = job.result()
             used = mode != 'off'
             if not used and cand.any():
                 notes.append(f"{s['name']}: 인식 처리가 꺼져 있어 Nav2 에 쓰이지 않습니다")
@@ -317,6 +357,6 @@ def _summary(R, probe, cfg, fp, xs, ys, X, Y, dist, det, inside):
     sectors = dict(front=np.abs(ang) <= 45, left=(ang > 45) & (ang < 135), right=(ang < -45) & (ang > -135), back=np.abs(ang) >= 135)
     ring_cov = {k: round(float(det[ring & m].mean()), 3) if (ring & m).any() else None for k, m in sectors.items()}
     return dict(v=v, a=a, reaction=round(react, 3), stop=round(stop, 3), front=round(fp['front'], 3),
-                corridor=dict(half_width=round(width, 3), ok=round(cnt('ok'), 3), late=round(cnt('late'), 3), blind=round(cnt('blind'), 3),
-                              centre=centre, bins=bins),
-                ring=dict(width=ring_w, **ring_cov), res=round(float(res), 4))
+                corridor=dict(half_width=round(width, 3), start=0.0 if drop else round(fp['front'], 3), ok=round(cnt('ok'), 3),
+                              late=round(cnt('late'), 3), blind=round(cnt('blind'), 3), centre=centre, bins=bins),
+                ring=dict(width=ring_w, **ring_cov), ring_blind=np.flatnonzero((ring & ~det).ravel()).tolist(), res=round(float(res), 4))

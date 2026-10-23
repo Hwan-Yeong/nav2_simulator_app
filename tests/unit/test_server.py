@@ -83,3 +83,17 @@ def test_sensor_library_and_types(client):
     finally:
         os.remove(path)
         sensortypes.reload()
+
+
+def test_coverage_endpoint(client):
+    probes = client.get('/api/coverage/probes').json()
+    assert {'low', 'threshold', 'overhang', 'leg', 'box', 'drop'} == {p['id'] for p in probes}
+    robot = client.get('/api/robots/everybot').json()['profile']
+    r = client.post('/api/robots/coverage', json={'robot': robot, 'probe': {'preset': 'leg'}})
+    assert r.status_code == 200
+    c = r.json()
+    assert len(c['bits']) == c['nx'] * c['ny'] and c['sensors'][0]['name'] == 'scan' and c['summary']['corridor']['ok'] == 1.0
+    again = client.post('/api/robots/coverage', json={'robot': robot, 'probe': {'preset': 'leg'}}).json()
+    assert again['ms'] == c['ms']                                   # served from the cache
+    assert client.post('/api/robots/coverage', json={'robot': robot, 'probe': {'preset': 'low', 'z0': 1, 'z1': 0}}).status_code == 400
+    assert client.post('/api/robots/coverage', json={}).status_code == 400

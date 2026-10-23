@@ -383,6 +383,24 @@ pre.code .add { color: var(--good); } pre.code .del { color: var(--bad); } pre.c
 .cadtools button { height: 30px; border: 0; background: transparent; border-radius: 6px; cursor: pointer; color: var(--muted); padding: 0 10px; display: inline-flex; gap: 6px; align-items: center; }
 .cadtools button:hover { background: var(--panel-3); color: var(--ink); }
 .cadtools button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
+.covpanel { top: 64px; right: 12px; width: 280px; padding: 10px 12px; display: grid; gap: 8px; max-height: calc(100% - 120px); overflow-y: auto; font-size: 12px; }
+.covpanel .covtitle { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.covpanel .seg button { font-size: 12px; padding: 4px 6px; }
+.covpanel .covsize > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.covpanel .covsize[open] > summary { margin-bottom: 6px; }
+.covdyn { display: grid; gap: 8px; }
+.covpanel .kv { grid-template-columns: max-content minmax(0, 1fr); }
+.covpanel .kv dd { white-space: normal; }
+.covstatus { min-height: 15px; }
+.covcorr { display: grid; gap: 4px; }
+.covbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--panel-3); }
+.covbar i { display: block; height: 100%; }
+.covcorr .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
+.covlegend { display: grid; gap: 2px; }
+.covlegend button { display: grid; grid-template-columns: 12px 1fr auto; gap: 6px; align-items: center; border: 0; background: transparent; padding: 3px 4px; border-radius: 5px; cursor: pointer; text-align: left; }
+.covlegend button:hover:not(:disabled) { background: var(--panel-3); }
+.covlegend button[aria-pressed="true"] { background: var(--accent-soft); }
+.covlegend button:disabled { opacity: 0.5; cursor: default; }
 .form { padding: 12px; display: grid; gap: 14px; align-content: start; grid-auto-rows: max-content; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }

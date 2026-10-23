@@ -6,6 +6,7 @@ import { h, icon, btn, toast, fmt, debounce, cssVar, DRIVE_LABEL, persist, menu 
 import { robotPolygon } from './viewport.js';
 import * as sim from './sim.js';
 import { typeLabel, modelOf, paramFields, libraryMenuItems, sensorLibrary, fovFootprint, fovOf, rayEnd, zoneCentres, rotation, apply } from './sensors.js';
+import { Coverage } from './coverage.js';
 
 const $ = (id) => document.getElementById(id);
 let R = null;            // profile being edited
@@ -17,6 +18,8 @@ let preview3d = null;
 let cad = null;
 let inited = false;
 let selSensor = -1;      // index of the sensor highlighted in the form and the editor
+let cov = null;          // detection coverage overlay (coverage.js)
+let cadHintText = '';
 
 const TEMPLATE_SENSOR = { name: 'scan', type: 'lidar2d', model: 'lidar_360', x: 0, y: 0, z: 0.18, roll_deg: 0, pitch_deg: 0, yaw_deg: 0, fov_deg: 360, beams: 360, range_min: 0.12, range_max: 10, hz: 10, noise: 0.01, dropout: 0, color: '#e5484d', enabled: true };
 const BASE_NAME = { lidar2d: 'lidar', tof: 'tof', ultrasonic: 'sonar', depth: 'depth' };
@@ -25,6 +28,7 @@ export async function show() {
   if (!inited) {
     inited = true;
     cad = new Cad($('cad'));
+    cov = new Coverage($('cadStage'), { robot: () => R, redraw: () => cad.draw(), ontoggle: () => initCadTools(), onfirst: () => cad.view === 'top' && cad.fitCoverage() });
     initCadTools();
     try {
       const { Robot3D } = await import('./robot3d.js');
@@ -62,6 +66,7 @@ function changed(rebuildForm = false) {
   if (rebuildForm) renderForm();
   cad.robot = R; cad.draw();
   preview3d && preview3d.update(R);
+  cov && cov.robotChanged();
   validate();
 }
 
@@ -292,11 +297,21 @@ function initCadTools() {
     h('span', { html: icon(ic) }), label);
   const view = h('div', { class: 'seg' }, ...[['top', '위에서'], ['side', '옆에서']].map(([k, lab]) => h('button', { 'aria-pressed': String(cad.view === k),
     onclick: (e) => { cad.view = k; persist('cad.view', k); for (const b of e.currentTarget.parentElement.children) b.setAttribute('aria-pressed', String(b === e.currentTarget)); cad.fit(); hint(); } }, lab)));
-  t.replaceChildren(view, mk('snap', '5 mm 스냅', 'fit'), mk('mirror', '좌우 대칭 편집', 'vertex'), mk('dims', '치수', 'sliders'),
-    h('button', { onclick: () => { cad.fit(); } }, h('span', { html: icon('fit') }), '맞춤'));
-  const hint = () => { $('cadHint').textContent = cad.view === 'side'
-    ? '옆에서 본 모습 (x–z) · 센서를 끌어 앞뒤·높이 조절 · 끝의 원을 끌어 pitch (아래로 +) · 점선: 바닥에 닿는 광선'
-    : '꼭짓점·센서를 끌어 옮기기 · 변 더블클릭: 꼭짓점 추가 · 꼭짓점 우클릭: 삭제 · 센서 방향 핸들 끌기 · 휠: 확대'; };
+  const covBtn = h('button', { 'aria-pressed': String(cov.on), title: '물체를 로봇 주변 어디에 두면 감지되는지, 멈출 수 있는지 봅니다',
+    onclick: async () => {
+      if (!cov.on && cad.view !== 'top') { cad.view = 'top'; persist('cad.view', 'top'); }
+      await cov.toggle();
+      if (cov.on) cad.fitCoverage();
+    } }, h('span', { html: icon('grid') }), '감지 범위');
+  t.replaceChildren(view, mk('snap', '5 mm 스냅', 'fit'), mk('mirror', '좌우 대칭 편집', 'vertex'), mk('dims', '치수', 'sliders'), covBtn,
+    h('button', { onclick: () => { if (cov.on && cad.view === 'top') cad.fitCoverage(); else cad.fit(); } }, h('span', { html: icon('fit') }), '맞춤'));
+  const hint = () => {
+    cadHintText = cad.view === 'side'
+      ? '옆에서 본 모습 (x–z) · 센서를 끌어 앞뒤·높이 조절 · 끝의 원을 끌어 pitch (아래로 +) · 점선: 바닥에 닿는 광선'
+      : cov.on ? '칸 색: 그 자리의 물체를 감지하는 센서 · 붉은 칸: 로봇 바로 옆 사각 · 점선: 앞 통로 · 굵은 선: 정지 거리 (초록 제때 / 노랑 늦음 / 빨강 못 봄) · 칸에 올리면 어느 센서인지'
+        : '꼭짓점·센서를 끌어 옮기기 · 변 더블클릭: 꼭짓점 추가 · 꼭짓점 우클릭: 삭제 · 센서 방향 핸들 끌기 · 휠: 확대';
+    $('cadHint').textContent = cadHintText;
+  };
   hint();
 }
 
@@ -318,7 +333,8 @@ class Cad {
   }
   colors() {
     this.k = { bg: cssVar('--panel-2'), grid: cssVar('--line'), grid2: cssVar('--line-strong'), ink: cssVar('--ink'), muted: cssVar('--muted'),
-      faint: cssVar('--faint'), accent: cssVar('--accent'), scan: cssVar('--scan'), robot: cssVar('--robot'), panel: cssVar('--panel'), good: cssVar('--good') };
+      faint: cssVar('--faint'), accent: cssVar('--accent'), scan: cssVar('--scan'), robot: cssVar('--robot'), panel: cssVar('--panel'), good: cssVar('--good'),
+      warn: cssVar('--warn'), bad: cssVar('--bad') };
   }
   resize() {
     const r = this.c.parentElement.getBoundingClientRect(), dpr = devicePixelRatio || 1;
@@ -326,6 +342,23 @@ class Cad {
     this.c.width = Math.max(1, r.width * dpr); this.c.height = Math.max(1, r.height * dpr);
     this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (!this.fitted && this.robot) { this.fit(); this.fitted = true; }
+    this.draw();
+  }
+  // the coverage in view, left of the coverage panel: the robot, its blind ring and every cell that sees the probe
+  fitCoverage() {
+    const d = cov && cov.data;
+    let x0 = -0.9, x1 = 1.6, yh = 1.0;
+    if (d) {
+      d.bits.forEach((b, k) => {
+        if (!b) return;
+        const x = d.x0 + (k % d.nx) * d.res, y = d.y0 + Math.floor(k / d.nx) * d.res;
+        x0 = Math.min(x0, x); x1 = Math.max(x1, x); yh = Math.max(yh, Math.abs(y));
+      });
+      x0 -= 0.2; x1 += 0.3; yh += 0.2;
+    }
+    const left = 16, right = this.W - (cov && cov.on ? 304 : 16);
+    this.s = Math.max(60, Math.min((right - left) / (x1 - x0), (this.H - 110) / (2 * yh)));
+    this.cx = x0 - (left - this.W / 2) / this.s; this.cy = 0;
     this.draw();
   }
   fit() {
@@ -373,6 +406,7 @@ class Cad {
     g.fillStyle = this.k.muted; g.font = '11px ui-monospace, monospace';
     g.fillText('x 전방', ox + 64, oy + 4); g.fillText('y 좌', ox + 4, oy - 64);
     if (!R0) return;
+    if (cov) cov.drawUnder(this);
     const poly = robotPolygon(R0, 64);
     // padding outline
     if (R0.footprint_padding > 0) {
@@ -408,23 +442,24 @@ class Cad {
     if (R0.footprint.type === 'polygon') {
       R0.footprint.points.forEach((p, i) => this.handle(p[0], p[1], this.hover && this.hover.kind === 'v' && this.hover.i === i));
     } else this.handle(R0.footprint.radius, 0, this.hover && this.hover.kind === 'r');
-    // sensors: lidar fans, and for 3D sensors the field of view where it meets the floor
+    // sensors: lidar fans, and for 3D sensors the field of view where it meets the floor (faint under the coverage)
+    const fade = cov && cov.on ? 0.35 : 1;
     for (const [i, sn] of R0.sensors.entries()) {
       const on = sn.enabled !== false, sel = i === selSensor;
       const col = sn.color || this.k.scan;
       const [sx, sy] = this.S(sn.x, sn.y), yaw = sn.yaw_deg * Math.PI / 180, rr = this.fanR(sn);
-      g.globalAlpha = on ? 1 : 0.35;
+      g.globalAlpha = (on ? 1 : 0.35) * fade;
       if (sn.type === 'lidar2d') {
         const fov = Math.min(sn.fov_deg, 360) * Math.PI / 180;
         g.fillStyle = col; g.globalAlpha *= sel ? 0.22 : 0.12; g.beginPath(); g.moveTo(sx, sy);
-        g.arc(sx, sy, rr, -(yaw + fov / 2), -(yaw - fov / 2)); g.closePath(); g.fill(); g.globalAlpha = on ? 1 : 0.35;
+        g.arc(sx, sy, rr, -(yaw + fov / 2), -(yaw - fov / 2)); g.closePath(); g.fill(); g.globalAlpha = (on ? 1 : 0.35) * fade;
         g.strokeStyle = col; g.lineWidth = sel ? 2 : 1; g.stroke();
       } else {
         const L = Math.min(sn.range_max, 1.0);
         const fp = fovFootprint(sn, L);
         g.fillStyle = col; g.globalAlpha *= sel ? 0.2 : 0.1; g.beginPath();
         fp.forEach((r, k) => { const [x, y] = this.S(r.p[0], r.p[1]); k ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.fill();
-        g.globalAlpha = on ? 1 : 0.35; g.strokeStyle = col; g.lineWidth = sel ? 2 : 1; g.setLineDash([4, 3]); g.stroke(); g.setLineDash([]);
+        g.globalAlpha = (on ? 1 : 0.35) * fade; g.strokeStyle = col; g.lineWidth = sel ? 2 : 1; g.setLineDash([4, 3]); g.stroke(); g.setLineDash([]);
         if (sn.type === 'tof' && sn.zones_x * sn.zones_y > 1) {      // where each zone looks
           for (const z of zoneCentres(sn)) {
             const r = rayEnd(sn, z.ty, z.tz, L), [x, y] = this.S(r.p[0], r.p[1]);
@@ -443,6 +478,7 @@ class Cad {
     }
     this.flushLabels();
     if (this.dims) this.dimensions(poly);
+    if (cov) cov.drawOver(this);
   }
   fanR(s) {
     const circ = Math.max(...robotPolygon(this.robot, 32).map(([x, y]) => Math.hypot(x, y)), 0.1);
@@ -585,6 +621,10 @@ class Cad {
     const [sx, sy] = this.pos(e);
     const d = this.drag;
     if (!d) {
+      if (cov && cov.on && this.view === 'top') {
+        const [wx, wy] = this.Wd(sx, sy), txt = cov.describe(wx, wy);
+        $('cadHint').textContent = txt || cadHintText;
+      }
       const hv = this.pick(sx, sy);
       if (JSON.stringify(hv) !== JSON.stringify(this.hover)) { this.hover = hv; this.draw(); }
       this.c.style.cursor = hv ? (hv.kind === 'yaw' ? 'alias' : 'move') : 'grab';

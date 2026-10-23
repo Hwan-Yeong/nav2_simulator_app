@@ -252,6 +252,39 @@ def robot_validate(body: dict):
         _bad(e)
 
 
+_coverage_cache = {}
+_coverage_lock = threading.Lock()
+
+
+@app.get('/api/coverage/probes')
+def coverage_probes():
+    from . import coverage
+    return [dict(id=k, **v) for k, v in coverage.PROBES.items()]
+
+
+@app.post('/api/robots/coverage')
+def robot_coverage(body: dict):
+    """Where a probe object would be detected around the robot: {robot, probe: {preset | kind, size, z0, z1, depth},
+    params?: perception overrides}. Takes about a second; the last results are kept."""
+    from . import coverage
+    if not isinstance(body.get('robot'), dict):
+        _bad('robot 이 필요합니다')
+    key = json.dumps(body, sort_keys=True)
+    with _coverage_lock:
+        hit = _coverage_cache.get(key)
+    if hit is not None:
+        return hit
+    try:
+        out = coverage.compute(body['robot'], body.get('probe'), params=body.get('params'))
+    except Exception as e:
+        _bad(e)
+    with _coverage_lock:
+        _coverage_cache[key] = out
+        while len(_coverage_cache) > 16:
+            _coverage_cache.pop(next(iter(_coverage_cache)))
+    return out
+
+
 @app.put('/api/robots/{rid}')
 def robot_save(rid: str, body: dict):
     try:

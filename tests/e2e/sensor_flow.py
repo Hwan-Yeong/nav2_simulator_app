@@ -2,7 +2,7 @@
 """Sensors through the UI.
 
 1. sensor library: make a ToF model, save it, delete it
-2. robot designer (Everybot 홈 로봇): add a sensor from the library, mirror one, side view
+2. robot designer (Everybot 홈 로봇): add a sensor from the library, mirror one, side view, detection coverage
 3. simulation with that robot: a 5 cm box on the path -> perception confirms it, the robot arrives without touching it;
    draw a drop with the cliff tool
 """
@@ -66,6 +66,17 @@ def main():
         assert '옆에서' in pg.inner_text('#cadHint')
         pg.click('#cadTools button:has-text("위에서")')
         print('ok  side view')
+        # ---------------------------------------------------------------- detection coverage
+        pg.click('#cadTools button:has-text("감지 범위")')
+        pg.wait_for_selector('.covstatus:has-text(" s")', timeout=60000)
+        pg.click('.covpanel .seg button:has-text("단차")')
+        pg.wait_for_timeout(300)
+        pg.wait_for_selector('.covstatus:has-text(" s")', timeout=60000)
+        dyn = pg.inner_text('.covdyn')
+        assert '제때 100%' in dyn and 'depth' in dyn, dyn
+        pg.click('.covpanel button[aria-label="감지 범위 닫기"]')
+        assert pg.locator('.covpanel').is_hidden()
+        print('ok  detection coverage: drop seen in time across the corridor')
         # ---------------------------------------------------------------- simulation with range sensors
         scene = {'start': start, 'goal': goal, 'static_obs': [low], 'dyn_obs': []}
         pg.evaluate(f"localStorage.setItem('ns.scene.synth_warehouse', JSON.stringify({json.dumps(scene)}));"

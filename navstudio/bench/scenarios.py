@@ -1,4 +1,5 @@
-"""Episode generation for any map and robot size: start/goal pairs, unmapped obstacles, pedestrians.
+"""Episode generation for any map and robot size: start/goal pairs, unmapped obstacles, pedestrians,
+low obstacles / overhangs (z0..z1, only range sensors see them) and drops (type 'cliff').
 
 Feasibility: an episode is 'blocked' when the widest free corridor between start and goal (with the unmapped
 obstacles in place) is narrower than the robot can pass. Blocked episodes are reported separately and excluded
@@ -133,14 +134,40 @@ def _obstacle(rng, x, y, th):
                  y=cy + s * math.sqrt(2) * math.sin(a + k * math.pi / 2 + math.pi / 4), r=0.025) for k in range(4)], 'chair'
 
 
+def _low_obstacle(rng, x, y, th):
+    """Something a 2D lidar at ~10-20 cm misses: a low box (3-8 cm) or an overhang (bottom 20-45 cm, like a shelf)."""
+    nx, ny = -math.sin(th), math.cos(th)
+    off = rng.uniform(-0.3, 0.3)
+    cx, cy = x + nx * off, y + ny * off
+    hw, hh = rng.uniform(0.12, 0.3), rng.uniform(0.12, 0.3)
+    r = dict(type='rect', x0=cx - hw, y0=cy - hh, x1=cx + hw, y1=cy + hh)
+    if rng.random() < 0.6:
+        return dict(r, z1=round(float(rng.uniform(0.03, 0.08)), 3)), 'low'
+    z0 = round(float(rng.uniform(0.2, 0.45)), 3)
+    return dict(r, z0=z0, z1=round(z0 + float(rng.uniform(0.04, 0.1)), 3)), 'overhang'
+
+
+def _drop(rng, x, y, th, rr):
+    """A drop next to the path that cuts into it (stairs going down, a loading dock edge)."""
+    nx, ny = -math.sin(th), math.cos(th)
+    side = rng.choice([-1.0, 1.0])
+    hw, hh = rng.uniform(0.3, 0.6), rng.uniform(0.3, 0.6)
+    off = side * (max(hw, hh) + rng.uniform(-0.15, 0.15) - rr * 0.5)
+    cx, cy = x + nx * off, y + ny * off
+    return dict(type='cliff', x0=cx - hw, y0=cy - hh, x1=cx + hw, y1=cy + hh, depth=round(float(rng.uniform(0.1, 0.5)), 2)), 'drop'
+
+
+CATEGORIES = ('nominal', 'unmapped', 'dynamic', 'low', 'drop')   # new ones go last: earlier episodes stay the same
+
+
 def generate(mid, counts, seed=1, robot_radius=0.175, dmin=3.0, dmax=22.0, start_clear=None):
-    """counts: {'nominal': n, 'unmapped': n, 'dynamic': n}. robot_radius: circumscribed radius (+padding)."""
+    """counts: {category: n} (CATEGORIES). robot_radius: circumscribed radius (+padding)."""
     rng = np.random.default_rng(seed)
     rr = robot_radius
     sc = start_clear or rr + 0.15
     w = World(mid, rr)
     eps, tries = [], 0
-    for cat in ('nominal', 'unmapped', 'dynamic'):
+    for cat in CATEGORIES:
         k = 0
         while k < counts.get(cat, 0) and tries < 6000:
             tries += 1
@@ -157,22 +184,30 @@ def generate(mid, counts, seed=1, robot_radius=0.175, dmin=3.0, dmax=22.0, start
                 continue
             ep = dict(id=f'{mid}/{cat}/{k:03d}', map=mid, category=cat, start=list(s), goal=list(g), ref_len=path_len(p),
                       static_obs=[], dyn_obs=[], tags=[])
-            if cat == 'unmapped':
-                obs, tags = [], []
-                for frac in sorted(rng.uniform(0.25, 0.8, size=int(rng.integers(1, 4)))):
+            if cat in ('unmapped', 'low', 'drop'):
+                obs, tags, placed = [], [], []
+                n_obs = int(rng.integers(1, 4)) if cat != 'drop' else int(rng.integers(1, 3))
+                for frac in sorted(rng.uniform(0.25, 0.8, size=n_obs)):
                     x, y, th = point_at(p, frac)
-                    if any(math.hypot(x - q[0], y - q[1]) < 0.7 + rr for q in (s, g)):
+                    if any(math.hypot(x - q[0], y - q[1]) < (0.7 if cat != 'drop' else 1.2) + rr for q in (s, g)):
                         continue
-                    o, t = _obstacle(rng, x, y, th)
+                    if cat == 'unmapped':
+                        o, t = _obstacle(rng, x, y, th)
+                    elif any(math.hypot(x - q[0], y - q[1]) < 1.2 for q in placed):
+                        continue
+                    else:
+                        o, t = _low_obstacle(rng, x, y, th) if cat == 'low' else _drop(rng, x, y, th, rr)
+                        o = [{k: round(float(v), 3) if isinstance(v, float) else v for k, v in o.items()}]
                     obs += o
                     tags.append(t)
+                    placed.append((x, y))
                 if not obs:
                     continue
                 w.update(obs)
                 if not w.connected(s[:2], g[:2]):
                     continue
                 p2 = w.astar(s[:2], g[:2])
-                if p2 is None:
+                if p2 is None or (cat != 'unmapped' and path_len(p2) > 1.5 * path_len(p) + 1.0):   # passable nearby, not a long detour
                     continue
                 ep['ref_len'], ep['static_obs'], ep['tags'] = path_len(p2), obs, tags
             if cat == 'dynamic':

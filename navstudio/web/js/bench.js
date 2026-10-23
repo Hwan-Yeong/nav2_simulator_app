@@ -11,8 +11,8 @@ let poll = null;
 let draft = null;        // new-run form state
 let formOpen = false;    // the new-run form is showing (survives switching workspaces)
 
-const CATS = { nominal: '정상', unmapped: '미등록 장애물', dynamic: '보행자' };
-const STATUS = { succeeded: '성공', aborted: '중단', timeout: '시간 초과', canceled: '취소', rejected: '거부', sim_timeout: '오류', stack_failed: '오류' };
+const CATS = { nominal: '정상', unmapped: '미등록 장애물', dynamic: '보행자', low: '낮은·공중 장애물', drop: '단차' };
+const STATUS = { succeeded: '성공', aborted: '중단', timeout: '시간 초과', fell: '낙하', canceled: '취소', rejected: '거부', sim_timeout: '오류', stack_failed: '오류' };
 
 export function show() {
   root = $('ws-bench');
@@ -69,15 +69,17 @@ export function episodeForm(spec, onchange) {
     h('button', { 'aria-pressed': String(spec.source === 'generate'), onclick: () => { spec.source = 'generate'; onchange(true); } }, '로봇 크기에 맞춰 생성'));
   const cats = h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap' } }, ...Object.entries(CATS).map(([k, v]) => h('label', { style: { display: 'flex', gap: '6px', alignItems: 'center' } },
     h('input', { type: 'checkbox', checked: spec.categories.includes(k), onchange: (e) => {
-      spec.categories = e.target.checked ? [...spec.categories, k] : spec.categories.filter((x) => x !== k); onchange();
+      spec.categories = e.target.checked ? [...spec.categories, k] : spec.categories.filter((x) => x !== k); onchange(true);
     } }), v)));
+  const sensorCats = spec.categories.some((c) => c === 'low' || c === 'drop') ?
+    h('div', { class: 'hint', text: '낮은·공중 장애물과 단차는 2D 라이다로 거의 안 보입니다. ToF·Depth 센서와 인식 처리가 있는 로봇(예: Everybot 홈 로봇)과 비교해 보세요. 단차에 빠지면 실패(낙하)로 셉니다.' }) : '';
   const per = h('b', { class: 'num', text: spec.per_map });
   return h('div', { class: 'sec' },
     h('h3', { text: '맵' }), maps,
     h('h3', { text: '시나리오' }), src,
     h('div', { class: 'hint', text: spec.source === 'bundled' ? '벤치마크에 썼던 고정 시나리오 (지름 0.35 m 원형 로봇 기준). 큰 로봇은 ‘생성’ 을 쓰세요.' : '선택한 로봇 크기에 맞춰 출발·목표·장애물을 새로 뽑습니다. 같은 시드면 같은 시나리오.' }),
     spec.source === 'generate' ? h('label', { class: 'field' }, h('span', { text: '시드' }), h('input', { type: 'number', value: spec.seed || 1, oninput: (e) => { spec.seed = +e.target.value; onchange(); } })) : '',
-    cats,
+    cats, sensorCats,
     h('label', { class: 'field' }, h('span', {}, '맵당 에피소드 ', per), h('input', { type: 'range', min: 1, max: 22, value: spec.per_map,
       oninput: (e) => { spec.per_map = +e.target.value; per.textContent = e.target.value; onchange(); } })));
 }
@@ -196,6 +198,7 @@ function renderRun(r) {
   const cols = [
     ['성공률', 'success', 1, (s) => `${pct(s.success)} <span class="faint">(${s.ci_lo !== null && s.ci_lo !== undefined ? (100 * s.ci_lo).toFixed(0) + '–' + (100 * s.ci_hi).toFixed(0) : '–'})</span>`],
     ['충돌', 'collision_rate', -1, (s) => pct(s.collision_rate)],
+    ['낙하', 'fall_rate', -1, (s) => (s.fall_rate === undefined || s.fall_rate === null ? '–' : pct(s.fall_rate))],
     ['평균 속도', 'avg_speed', 1, (s) => fmt.n(s.avg_speed, 3)],
     ['평균 소요', 'time_mean', -1, (s) => s.time_mean ? s.time_mean.toFixed(1) + 's' : '–'],
     ['이격 p10', 'min_clear_p10', 1, (s) => s.min_clear_p10 !== null && s.min_clear_p10 !== undefined ? (100 * s.min_clear_p10).toFixed(1) + 'cm' : '–'],
@@ -233,10 +236,10 @@ function renderRun(r) {
       ...rep.map((c, k) => {
         const x = e.by[k];
         if (!x) return h('td', { class: 'faint', text: running ? '…' : '–' });
-        const ok = x.status === 'succeeded' && !x.collisions;
-        const cls = ok ? 'succeeded' : x.collisions ? 'collision' : x.status;
+        const ok = x.status === 'succeeded' && !x.collisions && !x.falls;
+        const cls = ok ? 'succeeded' : x.falls ? 'fell' : x.collisions ? 'collision' : x.status;
         return h('td', { class: 'click', style: { cursor: 'pointer' }, title: '재생', onclick: () => replay(r, k, e.id) },
-          h('span', { class: 'st ' + cls, text: ok ? '성공' : x.collisions ? '충돌' : (STATUS[x.status] || x.status) }), h('span', { class: 'faint', text: ` ${x.duration ? x.duration.toFixed(0) + 's' : ''}` }));
+          h('span', { class: 'st ' + cls, text: ok ? '성공' : x.falls ? '낙하' : x.collisions ? '충돌' : (STATUS[x.status] || x.status) }), h('span', { class: 'faint', text: ` ${x.duration ? x.duration.toFixed(0) + 's' : ''}` }));
       })))));
   main.replaceChildren(
     h('div', { class: 'panel' },
@@ -274,7 +277,7 @@ export async function replay(run, cfg, eid) {
     h('dt', { text: '시간' }), h('dd', { text: rec.duration ? rec.duration.toFixed(1) + 's' : '–' }),
     h('dt', { text: '주행 / 기준 거리' }), h('dd', { text: rec.path_len ? `${rec.path_len.toFixed(1)} / ${rec.ref_len.toFixed(1)} m` : '–' }),
     h('dt', { text: '최소 이격' }), h('dd', { text: rec.min_clear !== undefined ? (100 * rec.min_clear).toFixed(1) + ' cm' : '–' }),
-    h('dt', { text: '복구 / 충돌' }), h('dd', { text: `${rec.recoveries ?? '–'} / ${rec.collisions ?? '–'}` }));
+    h('dt', { text: '복구 / 충돌 / 낙하' }), h('dd', { text: `${rec.recoveries ?? '–'} / ${rec.collisions ?? '–'} / ${rec.falls ?? '–'}` }));
   const close = modal(`${eid} · ${name}`, [wrap, info]);
   await new Promise((r) => requestAnimationFrame(r));
   const vp = new Viewport(wrap.querySelector('canvas'), { editable: false, layers: { global: false, local: false, scan: false } });

@@ -780,11 +780,11 @@ async function renderScenarios() {
   if (!box) return;
   let eps = [];
   try { eps = await api.get(`/api/scenarios/${S.sel.map}`); } catch (e) { /* none */ }
-  const cats = { all: '전체', nominal: '정상', unmapped: '미등록 장애물', dynamic: '보행자' };
+  const cats = { all: '전체', nominal: '정상', unmapped: '미등록', dynamic: '보행자', low: '낮은·공중', drop: '단차' };
   const list = eps.filter((e) => scenFilter === 'all' || e.category === scenFilter);
   box.replaceChildren(
     h('h3', {}, `시나리오 (${mapName(S.sel.map)})`),
-    eps.length ? h('div', { class: 'seg' }, ...Object.entries(cats).map(([k, v]) => h('button', { 'aria-pressed': String(scenFilter === k), onclick: () => { scenFilter = k; renderScenarios(); } }, v))) :
+    eps.length ? h('div', { class: 'seg wrap' }, ...Object.entries(cats).filter(([k]) => k === 'all' || eps.some((e) => e.category === k)).map(([k, v]) => h('button', { 'aria-pressed': String(scenFilter === k), onclick: () => { scenFilter = k; renderScenarios(); } }, v))) :
       h('div', { class: 'hint', text: '이 맵에는 준비된 시나리오가 없습니다. 도구로 출발점·목표·장애물을 직접 놓으세요.' }),
     h('div', { class: 'scenlist' }, ...list.map((e) => h('button', { class: 'scen', title: '불러오기: 출발점·목표·장애물을 이 시나리오로 바꿉니다', onclick: () => loadScenario(e) },
       h('i', { class: 'dot ' + e.category }), h('span', {}, e.id.split('/').slice(1).join(' / '), e.tags && e.tags.length ? h('small', { text: '  ' + e.tags.join(', ') }) : ''),
@@ -1231,8 +1231,9 @@ function renderSensorView() {
     const rows = names.map((n) => {
       const v = data[n], el = { val: h('span', { class: 'num' }) };
       let view = '';
-      if (v.type === 'tof' && v.nx * v.ny > 1) { el.cv = h('canvas', { class: 'zonemap', width: v.nx, height: v.ny }); view = el.cv; }
-      else if (v.type === 'depth') { el.cv = h('canvas', { class: 'depthmap', width: v.w, height: v.h }); view = el.cv; }
+      if (v.zones && v.nx * v.ny > 1) { el.cv = h('canvas', { class: 'zonemap', width: v.nx, height: v.ny }); view = el.cv; }
+      else if (v.type === 'depth' || v.depth) { el.cv = h('canvas', { class: 'depthmap', width: v.w, height: v.h }); view = el.cv; }
+      else if (Array.isArray(v.ranges)) { el.cv = h('canvas', { class: 'rangestrip', width: Math.max(1, v.ranges.length), height: 1 }); view = el.cv; }
       else { el.bar = h('i'); view = h('div', { class: 'rbar' }, el.bar); }
       sensorEls[n] = el;
       return h('div', { class: 'srow' }, h('div', { class: 'sname' }, h('i', { class: 'swatch', style: { background: (mounts[n] || {}).color || '#888' } }), h('b', { text: n }), el.val), view);
@@ -1247,7 +1248,7 @@ function renderSensorView() {
     const v = data[n], el = sensorEls[n], m = mounts[n] || {};
     if (!el) continue;
     const max = Math.min(m.range_max || 4, 4);
-    if (el.cv && v.type === 'tof') {
+    if (el.cv && v.zones && v.nx * v.ny > 1) {
       const g = el.cv.getContext('2d'), on = m.zone_mask ? new Set(m.zone_mask) : null;
       let near = Infinity;
       for (let i = 0; i < v.ny; i++) for (let j = 0; j < v.nx; j++) {
@@ -1257,7 +1258,13 @@ function renderSensorView() {
         g.fillStyle = distColor(d, max) || cssVar('--panel'); g.fillRect(j, i, 1, 1);
       }
       el.val.textContent = Number.isFinite(near) ? `최소 ${near.toFixed(2)} m` : '반사 없음';
-    } else if (el.cv && v.type === 'depth') {
+    } else if (el.cv && Array.isArray(v.ranges)) {
+      const g = el.cv.getContext('2d');
+      if (el.cv.width !== v.ranges.length) el.cv.width = Math.max(1, v.ranges.length);
+      v.ranges.forEach((d, k) => { g.fillStyle = distColor(d, max) || cssVar('--panel'); g.fillRect(k, 0, 1, 1); });
+      const hit = v.ranges.filter((d) => d > 0);
+      el.val.textContent = hit.length ? `최소 ${Math.min(...hit).toFixed(2)} m` : '반사 없음';
+    } else if (el.cv && (v.type === 'depth' || v.depth)) {
       const g = el.cv.getContext('2d');
       if (el.cv.width !== v.w || el.cv.height !== v.h) { el.cv.width = v.w; el.cv.height = v.h; }
       let near = Infinity;
@@ -1268,7 +1275,7 @@ function renderSensorView() {
       }
       el.val.textContent = Number.isFinite(near) ? `최소 ${near.toFixed(2)} m` : '반사 없음';
     } else {
-      const d = v.type === 'tof' ? (v.zones || [0])[0] : v.range;
+      const d = v.zones ? v.zones[0] : v.range;
       el.val.textContent = d > 0 ? `${d.toFixed(2)} m` : '반사 없음';
       el.bar.style.width = d > 0 ? `${Math.max(2, 100 * Math.min(1, d / max))}%` : '0';
       el.bar.style.background = distColor(d, max) || 'transparent';

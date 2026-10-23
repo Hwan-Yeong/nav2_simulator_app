@@ -29,7 +29,7 @@
    ```bash
    python3 scripts/check.py --release --tag v0.3.0
    python3 -m pytest
-   python3 tests/e2e/single_flow.py && python3 tests/e2e/compare_flow.py && python3 tests/e2e/manage_flow.py
+   python3 tests/e2e/single_flow.py && python3 tests/e2e/compare_flow.py && python3 tests/e2e/manage_flow.py && python3 tests/e2e/sensor_flow.py
    docker compose -f docker/compose.yml build   # 이미지가 만들어지는지
    ```
 6. **커밋, 태그, 올리기**

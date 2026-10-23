@@ -23,9 +23,11 @@ PYTHONPATH=$PWD python3 -m navstudio run --no-browser   # 소스에서 실행, h
 | `navstudio/paramgen.py` · `schema.py` | Nav2 파라미터 합성, UI 파라미터 스키마 |
 | `navstudio/configsets.py` | 설정 세트 저장소 |
 | `navstudio/maps.py` | 맵 목록·메타·가져오기·내보내기 |
-| `navstudio/sim/sim2d.py` | 2D 시뮬레이터 |
+| `navstudio/sim/sim2d.py` | 시뮬레이터 (2.5D 월드, 라이다·3D 센서, 보행자) |
+| `navstudio/sim/raycast.py` · `perception.py` | 3D 광선 계산, 낮은 장애물·단차 인식 노드 |
+| `navstudio/sensortypes/` · `sensors.py` | 센서 종류 플러그인, 센서 모델 라이브러리 ([SENSORS.md](SENSORS.md)) |
 | `navstudio/bench/` | 시나리오, 벤치마크 워커, 병렬 실행, 통계, 튜닝 |
-| `navstudio/web/` | UI. 빌드 도구 없는 ES 모듈 (`js/state.js` 상태, `sim.js` 시뮬레이션 화면, `main.js` 상단·연결) |
+| `navstudio/web/` | UI. 빌드 도구 없는 ES 모듈 (`js/state.js` 상태, `sim.js` 시뮬레이션 화면, `robot.js` 로봇 설계, `sensors.js` 센서 폼·라이브러리, `main.js` 상단·연결) |
 | `scripts/` | `check.py` 검사, `release.py` 릴리스, `capture_guide.py` · `capture_demo.py` 스크린샷·데모 |
 | `tests/unit/` | ROS 없이 도는 단위 테스트 (pytest) |
 | `tests/e2e/` | 실행 중인 서버를 브라우저로 조작하는 흐름 테스트 (Playwright) |
@@ -40,6 +42,7 @@ python3 scripts/check.py                # 버전 일치, 금지 이름, YAML 중
 python3 tests/e2e/single_flow.py        # 맵 → 시작 → 목표 → 파라미터 변경 → 재시작
 python3 tests/e2e/compare_flow.py       # 슬롯 3개 → 모두 시작 → 동시 출발 → 비교표 → 슬롯별 정지·시작·주행
 python3 tests/e2e/manage_flow.py        # 설정 세트 저장·불러오기·삭제, 맵 추가·이름 바꾸기·삭제
+python3 tests/e2e/sensor_flow.py        # 센서 모델 저장·삭제, 센서 달기·대칭 복제, 낮은 턱 인식·회피, 단차 그리기
 ```
 
 ROS 를 소싱한 셸에서는 ROS 의 pytest 플러그인이 끼어들 수 있습니다. 그때는 깨끗한 환경에서 돌립니다:
@@ -57,6 +60,7 @@ ROS 를 소싱한 셸에서는 ROS 의 pytest 플러그인이 끼어들 수 있�
 | REST API | `tests/unit/test_server.py`, 흐름 테스트 |
 | 저장 데이터 형식 (로봇·설정 세트·맵·실행 기록) | 예전 형식을 읽을 수 있게 하거나, 못 하면 MAJOR 버전 |
 | 기본 데이터 (`navstudio/data`) | `scripts/check.py` 가 맵·시나리오·스택 일관성을 검사 |
+| 센서 종류·인식 규칙 | `docs/SENSORS.md`, `tests/unit/test_sensors.py` |
 | 설계 결정 | `docs/DESIGN.md` |
 
 ## 규칙

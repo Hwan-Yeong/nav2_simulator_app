@@ -13,6 +13,11 @@ What a type defines
   publish(p, m, pubs, header, mount)  publish one Measurement
   perception_input           ('zones'|'points', topic suffix) that the perception node reads
   perceive(mount, data, cfg) obstacle / drop candidates in base_link from the latest data (perception 'rules')
+  floor_seen(mount, data, cfg)  bare floor seen now (clears confirmed obstacles there)              [optional]
+  fov                        (horizontal, vertical) field-of-view param keys, for drawing in the robot designer
+Measurement.vis is what the UI shows in the sensor view: {zones, nx, ny} grid, {w, h, depth} image,
+{range} one distance or {ranges} a list (0 / None = no return).
+A template to start from: navstudio/data/sensor_type_template.py (the sensor library writes a copy for you).
 """
 from dataclasses import dataclass, field
 
@@ -64,6 +69,7 @@ class SensorType:
     params = []
     defaults_override = {}
     perception_input = ('points', 'points')
+    fov = None
 
     def all_params(self):
         own = {p.key for p in self.params}
@@ -97,7 +103,7 @@ class SensorType:
         return p
 
     def schema(self):
-        return dict(type=self.type, label=self.label, description=self.description, planar=self.planar,
+        return dict(type=self.type, label=self.label, description=self.description, planar=self.planar, fov=self.fov,
                     params=[p.as_dict() for p in self.all_params()],
                     outputs=[dict(topic=t, msg=m) for t, m in self.outputs('<name>')])
 

@@ -42,6 +42,37 @@ def registry():
     return _registry
 
 
+def reload():
+    """Read the user sensor type files again (after adding or editing one)."""
+    global _registry
+    import sys
+    for k in [k for k in sys.modules if k.startswith('navstudio_user_sensor_')]:
+        del sys.modules[k]
+    errors.clear()
+    _registry = None
+    return registry()
+
+
+def user_dir():
+    return paths.user('sensor_types')
+
+
+def write_template(name='my_sensor'):
+    """Copy the documented example type into the user folder (not over an existing file); returns its path."""
+    import re
+    name = re.sub(r'[^a-z0-9_]', '_', name.lower()).strip('_') or 'my_sensor'
+    os.makedirs(user_dir(), exist_ok=True)
+    dst, k = os.path.join(user_dir(), name + '.py'), 2
+    while os.path.exists(dst):
+        dst, k = os.path.join(user_dir(), f'{name}_{k}.py'), k + 1
+    stem = os.path.basename(dst)[:-3]
+    src = open(paths.data('sensor_type_template.py'), encoding='utf-8').read()
+    src = src.replace("type = 'ir_array'", f"type = '{stem}'").replace("label = 'IR 거리 센서 배열'", f"label = 'IR 거리 센서 배열 ({stem})'")
+    with open(dst, 'w', encoding='utf-8') as f:     # each copy is its own type: the id is the file name
+        f.write(src)
+    return dst
+
+
 def get(t):
     reg = registry()
     if t not in reg:

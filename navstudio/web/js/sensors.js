@@ -5,11 +5,13 @@ import { h, icon, btn, toast, modal, confirmDlg } from './ui.js';
 
 const D2R = Math.PI / 180;
 
-export async function loadSensorCatalog() {
-  const [types, models] = await Promise.all([api.get('/api/sensor-types'), api.get('/api/sensors')]);
+export async function loadSensorCatalog(reload = false) {
+  const [types, models] = await Promise.all([reload ? api.post('/api/sensor-types/reload', {}) : api.get('/api/sensor-types'), api.get('/api/sensors')]);
   S.sensorTypes = types.types;
+  S.sensorTypeDir = types.dir;
+  S.sensorTypeErrors = types.errors || {};
   S.sensorModels = models;
-  if (Object.keys(types.errors || {}).length) toast('불러오지 못한 센서 종류: ' + Object.entries(types.errors).map(([f, e]) => `${f} (${e})`).join(', '), 'bad');
+  if (Object.keys(S.sensorTypeErrors).length) toast('불러오지 못한 센서 종류: ' + Object.entries(S.sensorTypeErrors).map(([f, e]) => `${f} (${e})`).join(', '), 'bad');
 }
 
 export const typeOf = (t) => (S.sensorTypes || []).find((x) => x.type === t);
@@ -26,6 +28,11 @@ export const apply = (R, v) => [R[0][0] * v[0] + R[0][1] * v[1] + R[0][2] * v[2]
 
 // horizontal / vertical half angles of the field of view (rad)
 export function fovOf(s) {
+  const t = typeOf(s.type);
+  if (t && t.fov) {                     // the type says which params are its field of view
+    const [kh, kv] = t.fov, hz = kh ? +s[kh] || 0 : 0, vt = kv ? +s[kv] || 0 : 0;
+    return [Math.min(360, hz) * D2R / 2, Math.min(180, vt) * D2R / 2];
+  }
   if (s.type === 'lidar2d') return [Math.min(360, s.fov_deg) * D2R / 2, 0];
   if (s.type === 'ultrasonic') return [s.beam_deg * D2R / 2, s.beam_deg * D2R / 2];
   if (s.fov_h_deg !== undefined) return [s.fov_h_deg * D2R / 2, (s.fov_v_deg ?? s.fov_h_deg) * D2R / 2];
@@ -144,7 +151,16 @@ export function sensorLibrary({ onchange } = {}) {
       ...(S.sensorTypes || []).map((t) => btn(t.label, { cls: 'sm', icon: 'plus', onclick: () => {
         const d = Object.fromEntries(t.params.map((p) => [p.key, p.default]));
         draft = { ...d, type: t.type, name: `새 ${t.label}`, description: '' }; sel = null; render();
-      } }))));
+      } }))),
+    h('div', { class: 'sec' }, h('div', { class: 'grouplabel', text: '센서 종류 (플러그인)' }),
+      h('div', { class: 'hint', text: `새 종류는 파이썬 파일 하나입니다: ${S.sensorTypeDir || '~/.navstudio/sensor_types'}/*.py` }),
+      ...Object.entries(S.sensorTypeErrors || {}).map(([f, e]) => h('div', { class: 'errbox', text: `${f}: ${e}` })),
+      btn('템플릿 만들기', { cls: 'sm', icon: 'code', title: '설명이 달린 예제 센서 종류(IR 거리 센서 배열)를 위 폴더에 만듭니다', onclick: async () => {
+        try { const r = await api.post('/api/sensor-types/template', { name: 'my_sensor' }); toast(`만들었습니다: ${r.path} — 고친 뒤 ‘다시 읽기’`, 'good'); } catch (e) { toast(e.message, 'bad'); }
+      } }),
+      btn('다시 읽기', { cls: 'sm', icon: 'restart', title: '폴더의 센서 종류 파일을 다시 읽습니다', onclick: async () => {
+        try { await loadSensorCatalog(true); await refresh(); render(); toast(`센서 종류 ${S.sensorTypes.length}개`, 'good'); } catch (e) { toast(e.message, 'bad'); }
+      } })));
   }
   function renderEditor() {
     const m = draft;

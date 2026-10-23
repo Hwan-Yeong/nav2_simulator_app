@@ -278,7 +278,20 @@ def stacks():
 @app.get('/api/sensor-types')
 def sensor_types():
     from . import sensortypes
-    return dict(types=sensortypes.schemas(), errors=sensortypes.errors)
+    return dict(types=sensortypes.schemas(), errors=sensortypes.errors, dir=sensortypes.user_dir())
+
+
+@app.post('/api/sensor-types/reload')
+def sensor_types_reload():
+    from . import sensortypes
+    sensortypes.reload()
+    return sensor_types()
+
+
+@app.post('/api/sensor-types/template')
+def sensor_types_template(body: dict = None):
+    from . import sensortypes
+    return dict(path=sensortypes.write_template((body or {}).get('name') or 'my_sensor'))
 
 
 @app.get('/api/sensors')
@@ -565,7 +578,7 @@ def run_get(rid: str, weights: str | None = None):
             for rec in runs.read_results(os.path.join(r.dir, f'cfg_{k}')):
                 eps.append(dict(cfg=k, id=rec['id'], map=rec['map'], category=rec['category'], status=rec['status'],
                                 collisions=rec.get('collisions'), duration=rec.get('duration'), path_len=rec.get('path_len'),
-                                ref_len=rec.get('ref_len'), min_clear=rec.get('min_clear'), recoveries=rec.get('recoveries'),
+                                ref_len=rec.get('ref_len'), min_clear=rec.get('min_clear'), recoveries=rec.get('recoveries'), falls=rec.get('falls'),
                                 gap=feas.get(rec['id'], {}).get('gap')))
         out['episodes'] = eps
     return out

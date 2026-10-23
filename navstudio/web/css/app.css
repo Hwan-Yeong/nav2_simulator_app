@@ -151,6 +151,7 @@ label.field > span { font-weight: 500; }
 .scen:hover { border-color: var(--line-strong); }
 .scen .dot { width: 8px; height: 8px; border-radius: 50%; }
 .scen .dot.nominal { background: var(--plan); } .scen .dot.unmapped { background: var(--obs); } .scen .dot.dynamic { background: var(--ped); }
+.scen .dot.low { background: var(--perc); } .scen .dot.drop { background: var(--cliff); }
 .scen small { color: var(--faint); font-family: var(--f-mono); }
 
 /* option cards (robot / stack / preset) */
@@ -353,6 +354,7 @@ table.cmp td.good { color: var(--good); } table.cmp td.bad { color: var(--bad); 
 .srow .btn { justify-self: start; }
 .zonemap, .depthmap { image-rendering: pixelated; border-radius: 4px; border: 1px solid var(--line); background: var(--panel); }
 .zonemap { width: 96px; height: 96px; }
+.rangestrip { width: 100%; max-width: 220px; height: 14px; image-rendering: pixelated; border-radius: 4px; border: 1px solid var(--line); }
 .depthmap { width: 100%; max-width: 220px; aspect-ratio: 4 / 3; height: auto; }
 .rbar { height: 8px; border-radius: 4px; background: var(--panel-3); overflow: hidden; }
 .rbar i { display: block; height: 100%; width: 0; transition: width .15s; }
@@ -440,7 +442,7 @@ table.t td.n, table.t th.n { text-align: right; font-family: var(--f-mono); }
 table.t tr.click { cursor: pointer; }
 table.t tr.click:hover td { background: var(--panel-2); }
 table.t tr.best td { background: var(--accent-soft); }
-.st { font-weight: 600; } .st.succeeded { color: var(--good); } .st.aborted, .st.timeout { color: var(--bad); } .st.collision { color: var(--bad); }
+.st { font-weight: 600; } .st.succeeded { color: var(--good); } .st.aborted, .st.timeout, .st.fell { color: var(--bad); } .st.collision { color: var(--bad); }
 .progress { height: 8px; background: var(--panel-3); border-radius: 4px; overflow: hidden; }
 .progress i { display: block; height: 100%; background: var(--accent); width: 0; transition: width .4s; }
 .checklist { display: grid; gap: 4px; max-height: 240px; overflow-y: auto; }

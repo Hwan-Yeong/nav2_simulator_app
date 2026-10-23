@@ -28,6 +28,7 @@ def thin(a, r):
 class Depth(SensorType):
     type = 'depth'
     label = 'Depth 카메라'
+    fov = ('fov_h_deg', 'fov_v_deg')
     description = '픽셀마다 깊이(카메라 앞 방향 거리)를 냅니다. depth 영상(16UC1, mm)과 CameraInfo, 포인트 클라우드를 발행합니다.'
     defaults_override = dict(hz=10.0, range_min=0.2, range_max=4.0, noise=0.002, color='#1971c2')
     params = [

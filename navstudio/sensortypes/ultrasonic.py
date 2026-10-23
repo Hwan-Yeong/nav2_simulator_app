@@ -21,6 +21,7 @@ def cone_rays(p, rings=3, per_ring=8):
 class Ultrasonic(SensorType):
     type = 'ultrasonic'
     label = '초음파'
+    fov = ('beam_deg', 'beam_deg')
     description = '원뿔 안의 가장 가까운 물체까지 거리 하나를 냅니다 (방향은 모름). 유리·검은 물체처럼 빛 센서가 놓치는 것용.'
     defaults_override = dict(hz=20.0, range_min=0.03, range_max=4.0, noise=0.01, color='#2b8a3e')
     params = [Param('beam_deg', '빔 각도', 30.0, min=2, max=120, step=1, unit='°', group='빔')]

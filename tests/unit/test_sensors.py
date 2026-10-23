@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -17,6 +19,8 @@ def test_builtin_types_and_schemas():
 def test_user_sensor_type_plugin_is_loaded(home):
     (home / 'sensor_types').mkdir()
     (home / 'sensor_types' / 'bumper.py').write_text('''
+import os
+
 import numpy as np
 from navstudio.sensortypes.base import Param, SensorType, Measurement
 
@@ -154,3 +158,25 @@ def test_perception_clears_obstacle_when_floor_is_seen_again():
     n = len(core.confirmed['obstacle'])
     feed({})
     assert len(core.confirmed['obstacle']) == n
+
+
+def test_sensor_type_template_works_as_a_plugin(home):
+    path = sensortypes.write_template('my ir')
+    assert path.endswith('my_ir.py') and sensortypes.write_template('my ir').endswith('my_ir_2.py')
+    try:
+        sensortypes.reload()
+        assert {'my_ir', 'my_ir_2'} <= set(sensortypes.types()) and not sensortypes.errors
+        st = sensortypes.get('my_ir')
+        m = sensors.normalize_mount(dict(name='ir', type='my_ir', x=0.18, z=0.05, count=7))
+        assert m['spread_deg'] == 90 and m['hz'] == 20.0 and tuple(st.schema()['fov']) == ('spread_deg', None)
+        rays = st.rays(m)
+        assert rays.shape == (7, 3)
+        t = np.array([0.3, np.inf, 0.5, 0.5, np.inf, 0.2, 0.9])
+        meas = st.measure(dict(m, noise=0.0), rays, t, np.random.default_rng(0))
+        assert len(meas.points) == 4 and meas.vis['ranges'][1] == 0       # 0.9 m is beyond range_max 0.8
+        obs, drops = st.perceive(m, meas.points, dict(obstacle_min_height=0.02))
+        assert obs.shape[1] == 2 and len(drops) == 0
+    finally:
+        os.remove(path)
+        os.remove(path.replace('my_ir.py', 'my_ir_2.py'))
+        sensortypes.reload()

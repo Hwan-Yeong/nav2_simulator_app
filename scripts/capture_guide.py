@@ -2,7 +2,7 @@
 """Capture the user-guide screenshots (docs/guide/img, element boxes in boxes.json for the numbered callouts) and the
 README images (docs/img), from a running server on :8765.
 
-python3 scripts/capture_guide.py all | prepare | sim tools panels compare maps robot bench tune | readme
+python3 scripts/capture_guide.py all | prepare | sim tools panels compare maps robot sensors sensorsim bench tune | readme
 
 Run it against a clean NAVSTUDIO_HOME so old runs or private maps do not show up, e.g.
   NAVSTUDIO_HOME=/tmp/ns-capture NAVSTUDIO_OVERLAY=~/.navstudio/overlay/install/setup.bash navstudio run --no-browser
@@ -83,18 +83,18 @@ def scene(map_id, ep, extra_static=(), extra_dyn=()):
                                'static_obs': ep['static_obs'] + list(extra_static), 'dyn_obs': ep['dyn_obs'] + list(extra_dyn)})
 
 
-def sim_start(map_id, ep, extra_static=(), extra_dyn=()):
+def sim_start(map_id, ep, extra_static=(), extra_dyn=(), robot_id='everybot'):
     api('POST', '/api/session/stop', {})
-    api('POST', '/api/session/start', {'slot': 0, 'map': map_id, 'robot_id': 'everybot', 'stack': 'prod', 'values': {}, 'start': ep['start']})
+    api('POST', '/api/session/start', {'slot': 0, 'map': map_id, 'robot_id': robot_id, 'stack': 'prod', 'values': {}, 'start': ep['start']})
     wait_slots(1)
     scene(map_id, ep, extra_static, extra_dyn)
     api('POST', '/api/nav/goal', {'pose': ep['goal']})
 
 
-def load_scene_in_ui(pg, map_id, ep, extra_static=(), extra_dyn=()):
+def load_scene_in_ui(pg, map_id, ep, extra_static=(), extra_dyn=(), robot_id='everybot'):
     """Put the scene into the page's own storage too, so the UI shows the same obstacles before anything runs."""
     sc = {'start': ep['start'], 'goal': ep['goal'], 'static_obs': ep['static_obs'] + list(extra_static), 'dyn_obs': ep['dyn_obs'] + list(extra_dyn)}
-    pg.evaluate(f"localStorage.setItem('ns.scene.{map_id}', JSON.stringify({json.dumps(sc)})); localStorage.setItem('ns.sel', JSON.stringify({{map: '{map_id}', robotId: 'everybot'}}))")
+    pg.evaluate(f"localStorage.setItem('ns.scene.{map_id}', JSON.stringify({json.dumps(sc)})); localStorage.setItem('ns.sel', JSON.stringify({{map: '{map_id}', robotId: '{robot_id}'}}))")
 
 
 # ---------------------------------------------------------------- data the screenshots show
@@ -255,6 +255,60 @@ def shot_robot(p):
     br.close()
 
 
+def shot_sensors(p):
+    br, pg = page(p, B + '/#robot')
+    pg.select_option('#robotForm select', 'everybot_home')
+    pg.wait_for_timeout(2500)
+    card = pg.locator('#robotForm .sensor').nth(2)          # mtof_left
+    card.locator('header').click()
+    card.locator('details summary').click()
+    card.scroll_into_view_if_needed()
+    pg.locator('#robotForm .sensor').nth(1).scroll_into_view_if_needed()
+    pg.wait_for_timeout(1500)
+    shot(pg, 'robot_sensors.png')
+    save_boxes('robot_sensors', pg, {'card': '#robotForm .sensor.sel', 'specs': '#robotForm .sensor.sel details', 'lib': '#robotForm button:has-text("라이브러리")',
+                                     'add': '#robotForm button:has-text("센서 추가")', 'view': '#cadTools .seg', 'cad': '#cadStage', 'three': '#threeWrap', 'derived': '#derived'})
+    pg.click('#cadTools button:has-text("옆에서")')
+    pg.wait_for_timeout(1200)
+    shot(pg, 'robot_side.png', clip=around(pg, '#cadStage', 0))
+    pg.click('#cadTools button:has-text("위에서")')
+    pg.click('#robotForm button:has-text("라이브러리")')
+    pg.click('.liblist button:has-text("멀티존 ToF 8×8")')
+    pg.wait_for_timeout(800)
+    shot(pg, 'sensor_library.png', clip=around(pg, '.modal-card', 0))
+    br.close()
+
+
+def shot_sensorsim(p):
+    meta = api('GET', '/api/maps/synth_warehouse')
+    x0, y0, _ = meta['start']
+    ep = {'start': [x0, y0, 0.0], 'goal': [x0 + 3.2, y0, 0.0], 'static_obs': [], 'dyn_obs': []}
+    obs = [{'type': 'rect', 'x0': x0 + 1.0, 'y0': y0 - 0.35, 'x1': x0 + 1.2, 'y1': y0 + 0.35, 'z1': 0.05},
+           {'type': 'cliff', 'x0': x0 + 2.0, 'y0': y0 + 0.3, 'x1': x0 + 2.6, 'y1': y0 + 1.2, 'depth': 0.3},
+           {'type': 'rect', 'x0': x0 + 1.8, 'y0': y0 - 1.3, 'x1': x0 + 2.6, 'y1': y0 - 0.5, 'z0': 0.7, 'z1': 0.75}]
+    api('POST', '/api/session/stop', {})
+    br, pg = page(p, B + '/#sim')
+    load_scene_in_ui(pg, 'synth_warehouse', ep, obs, robot_id='everybot_home')
+    pg.reload()
+    pg.wait_for_timeout(3000)
+    sim_start('synth_warehouse', ep, obs, robot_id='everybot_home')
+    pg.wait_for_timeout(2500)
+    pg.click('#runbar button[title^="로봇 따라가기"]')
+    box = pg.locator('#view').bounding_box()
+    pg.mouse.move(box['x'] + box['width'] / 2, box['y'] + box['height'] / 2)
+    for _ in range(7):
+        pg.mouse.wheel(0, -200)
+        pg.wait_for_timeout(60)
+    pg.click('button[data-tool="box"]')
+    pg.mouse.move(VW - 10, VH - 10)
+    pg.wait_for_timeout(5500)
+    shot(pg, 'sim_sensors.png')
+    save_boxes('sim_sensors', pg, {'tools': '#tools', 'cliff': 'button[data-tool="cliff"]', 'opts': '#toolOpts', 'layers': '#layers',
+                                   'panel': '#tSensors', 'view': '#stage'})
+    api('POST', '/api/session/stop', {})
+    br.close()
+
+
 def shot_bench(p):
     br, pg = page(p, B + '/#bench')
     pg.click('#ws-bench .opt')
@@ -281,7 +335,7 @@ def shot_tune(p):
 def readme():
     """README images: the same screens at 1x."""
     os.makedirs(README_IMG, exist_ok=True)
-    for src, dst in (('sim_overview.png', 'sim.png'), ('sim_compare.png', 'compare.png'), ('robot.png', 'robot_designer.png'),
+    for src, dst in (('sim_overview.png', 'sim.png'), ('sim_compare.png', 'compare.png'), ('robot_sensors.png', 'robot_designer.png'), ('sim_sensors.png', 'sensors.png'),
                      ('bench_result.png', 'benchmark.png'), ('tune_result.png', 'tuning.png')):
         im = Image.open(os.path.join(OUT, src))
         im = im.resize((im.width // 2, im.height // 2), Image.LANCZOS)
@@ -291,7 +345,7 @@ def readme():
     print('readme images ->', README_IMG)
 
 
-ORDER = ['sim', 'tools', 'panels', 'compare', 'maps', 'robot', 'bench', 'tune']
+ORDER = ['sim', 'tools', 'panels', 'compare', 'maps', 'robot', 'sensors', 'sensorsim', 'bench', 'tune']
 
 if __name__ == '__main__':
     what = sys.argv[1:] or ['all']

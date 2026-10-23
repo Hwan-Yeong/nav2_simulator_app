@@ -67,6 +67,11 @@ def build_episodes(spec, robots):
         for mid in spec['maps']:
             pool = maps.scenarios(mid)
             by = {c: [e for e in pool if e['category'] == c] for c in cats}
+            missing = [c for c in cats if not by[c]]      # e.g. a map prepared before a category existed: generate those
+            if missing and robots:
+                circ = max(robotlib.inscribed_circumscribed(R)[1] + R['footprint_padding'] for R in robots)
+                for e in scenlib.generate(mid, {c: math.ceil(per / len(cats)) for c in missing}, seed=int(spec.get('seed', 1)), robot_radius=circ):
+                    by[e['category']].append(e)
             picked, i = [], 0
             while len(picked) < per and any(by.values()):
                 c = cats[i % len(cats)]

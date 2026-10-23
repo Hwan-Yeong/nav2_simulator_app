@@ -1,0 +1,127 @@
+# 센서와 인식
+
+Nav Studio 0.3 부터 로봇에 2D 라이다 말고도 ToF(단일·멀티존), 초음파, Depth 카메라를 달고, 그 데이터로 낮은 장애물과 단차를 찾아 Nav2 costmap 에 올릴 수 있습니다.
+이 문서는 월드 모델, 센서 라이브러리, 로봇에 다는 법, 인식 처리, 새 센서 종류를 만드는 법을 설명합니다. 화면 사용법은 [USAGE.md](USAGE.md) 와 사용 가이드 PDF 를 보세요.
+
+## 월드: 2.5D
+
+| 대상 | 표현 | 누가 보나 |
+|---|---|---|
+| 벽 (맵) | 점유 격자, 높이 2 m | 모든 센서 |
+| 박스·기둥 | 바닥 모양(사각형·원) + 높이 `z0`~`z1` (기본 0~1 m) | 라이다는 자기 높이가 `z0`~`z1` 안일 때만, 3D 센서는 광선이 닿으면 |
+| 낮은 장애물 | `z1` 이 작은 박스 (예: 5 cm 턱, 1.5 cm 문턱) | 바닥 가까이를 보는 ToF·Depth |
+| 공중 장애물 | `z0` > 0 인 박스 (예: 테이블 상판 0.65~0.75 m) | 그 높이를 보는 센서 |
+| 단차 | `type: cliff` 사각형, 바닥이 `depth` 만큼 낮음 | 바닥을 보는 센서 (거리가 길어지거나 반사가 사라짐) |
+| 보행자 | 원기둥 0~1.7 m | 모든 센서 |
+
+- **충돌**: 장애물이 `등반 높이 < z` 이고 `z < 차체 높이` 인 구간과 겹치면 막힙니다. 등반 높이보다 낮은 문턱은 넘어가고, 차체보다 높이 떠 있는 것은 아래로 지나갑니다.
+- **낙하**: 로봇 중심이 등반 높이보다 깊은 단차에 들어가면 떨어져 멈춥니다. 지표 `falls`, 벤치마크에서는 실패로 셉니다.
+- **광선 계산**: 3D 센서는 광선마다 바닥·단차 바닥(해석식), 박스(기울어진 상자), 원기둥, 벽(격자 따라가기)과의 첫 교차점을 numpy 로 구합니다 (`sim/raycast.py`). 센서 하나 한 주기에 수 ms 입니다.
+
+## 센서 라이브러리
+
+센서 **모델**은 센서 종류와 그 사양(시야, 해상도, 거리, 주기, 잡음…)을 이름 붙여 저장한 것입니다. 로봇 설계의 **라이브러리** 버튼으로 엽니다.
+
+- 기본 모델: 2D 라이다 360° / 270° / 240°, 1D ToF, 멀티존 ToF 4×4 / 8×8, 바닥 IR(단차 센서), 초음파, Depth 카메라. 바꿀 수 없고, 고친 값은 **내 센서로 저장** 으로 복사합니다.
+- 내 센서: `~/.navstudio/sensors/<id>.yaml`. 다른 PC 로 복사해도 됩니다.
+- `mount_hint` 를 넣으면 로봇에 달 때 그 높이·각도로 시작합니다 (예: 8×8 ToF 는 z 0.08 m, pitch 25°).
+
+## 로봇에 달기
+
+로봇 설계의 **센서 추가** 에서 모델을 고르면 그 사양이 복사되어 로봇에 붙습니다(이후 모델을 바꿔도 로봇은 그대로, **라이브러리 값으로 되돌리기** 로 다시 맞춤).
+
+- **자세**: 위치 `x, y, z` (base_link 기준, z 는 바닥에서 높이), 방향 `roll, pitch, yaw` (도). **pitch 는 + 가 아래를 봅니다** (ROS 관례). 라이다는 yaw 만 씁니다.
+- **편집기**: 위에서 본 모습에 라이다 부채꼴, 3D 센서의 시야가 바닥에 닿는 범위(멀티존 ToF 는 존마다 점)가 그려집니다. **옆에서** 로 바꾸면 높이와 pitch 를 끌어서 맞추고, 아래쪽 광선이 바닥에 닿는 거리가 표시됩니다.
+- **좌우 대칭으로 복제**: y·yaw 를 뒤집고 존 마스크도 좌우로 뒤집어 반대편 센서를 만듭니다.
+- **존 마스크**(멀티존 ToF): 실제로 쓰는 존만 켭니다. 센서 뒤에서 본 모습이며 왼쪽 위가 0 번입니다. 끈 존은 발행값이 0 이고 인식에 쓰지 않습니다.
+- **켜기/끄기**: 카드의 체크 상자. 꺼진 센서는 시뮬레이션·인식에서 빠집니다.
+
+### 라이다 병합 (/scan)
+
+라이다가 둘 이상이면 **라이다 병합** 을 켤 수 있습니다. 고른 라이다를 각도 구간마다 가장 가까운 거리로 합쳐 `base_scan` 프레임의 360° `/scan` 하나로 냅니다(각 라이다는 `/scan_<이름>` 으로도 그대로 나감). Nav2 obstacle layer 는 병합된 `/scan` 과 병합에 넣지 않은 라이다를 씁니다.
+앞뒤 240° 라이다 두 개를 합쳐 쓰는 구성이 `Everybot 홈 로봇` 프리셋에 들어 있습니다.
+
+### 토픽과 프레임
+
+| 센서 | 토픽 | 프레임 |
+|---|---|---|
+| 2D 라이다 | `/scan_<이름>` (이름이 `scan` 이고 병합을 안 쓰면 `/scan`), 병합 시 `/scan` | `laser_<이름>`, 병합 `base_scan` |
+| ToF | `/sensors/<이름>/zones` (Float32MultiArray, 행×열, 0 = 반사 없음), `/sensors/<이름>/points` | `<이름>_link` |
+| 초음파 | `/sensors/<이름>/range` (Range), `/sensors/<이름>/points` | `<이름>_link` |
+| Depth | `/sensors/<이름>/depth/image_raw` (16UC1, mm), `/sensors/<이름>/depth/camera_info`, `/sensors/<이름>/points` | `<이름>_link`, 영상은 `<이름>_optical_frame` |
+
+센서 프레임은 +x 가 보는 방향, y 왼쪽, z 위입니다. 정적 TF `base_link → <이름>_link` 를 시뮬레이터가 냅니다.
+
+## 인식 처리
+
+로봇 설계의 **인식 처리** 에서 고릅니다.
+
+| 방식 | 동작 |
+|---|---|
+| 규칙 기반 인식 (권장) | 인식 노드(`navstudio_perception`)가 센서 데이터를 규칙으로 걸러 확정된 낮은 장애물·단차만 `/perception/obstacles`, `/perception/drops` 로 냅니다. costmap 에는 `perception_layer`(ObstacleLayer, 지우기 없음)로 들어갑니다. |
+| 원시 점 바로 사용 | 센서 점구름을 그대로 `sensor_layer`(VoxelLayer, 높이 2 cm~차체+5 cm)에 넣습니다. 바닥 잡음과 단차는 다루지 않습니다. |
+| 끔 | 3D 센서는 시뮬레이션만 하고 costmap 에 넣지 않습니다. |
+
+### 규칙
+
+로봇의 탑재 인식 파이프라인과 같은 방식으로 다시 구현했습니다 (`sim/perception.py`, 종류별 규칙은 각 센서 종류의 `perceive`).
+
+- **ToF 존**: 존 거리 d 로 점 p = 자세 × (d, d·tanY, d·tanZ) 를 만듭니다.
+  - 장애물: p 의 높이가 `obstacle_min_height`~`obstacle_max_height` 사이이거나, 같은 열에서 위아래로 붙은 두 존이 거의 같은 점을 맞힘(수직면).
+  - 단차: 그 존이 바닥을 봐야 하는데(장착 자세로 계산한 바닥 거리) 측정 거리가 `drop_range_diff` 이상 길거나, 점이 바닥보다 `drop_min_depth` 이상 낮거나, 바닥을 봐야 하는데 반사가 없음. 광선이 바닥면을 지나는 곳에 진행 방향과 수직인 짧은 선으로 표시합니다.
+- **Depth**: 높이 띠 안의 점 중 주변(`neighbor_radius`)에 `min_neighbors` 개 이상 있는 것만 장애물. 바닥보다 `drop_min_depth` 낮은 점은 단차.
+- **초음파**: 반사가 있으면 원뿔 축 위의 점을 장애물로.
+- **공통**: `max_range` 밖은 버림 → 라이다 점 `lidar_check_radius` 안의 장애물 후보는 버림(라이다가 이미 봄) → `confirm_frames` 번 연속으로 보여야 확정 → 확정 점은 맵 좌표에 남음.
+- **지우기**: 새 주행·순간이동·장면 변경 때 서버가 `/perception/clear` 를 보냅니다. `clear_radius` > 0 이면 확정된 장애물 근처에서 바닥이 다시 보일 때 그 장애물을 지웁니다(치운 물체나 오검출에 갇히지 않게). 단차는 이렇게 지우지 않습니다.
+
+파라미터는 시뮬레이션의 **파라미터 → 센서 인식** 에서 바꿉니다 (`navstudio_perception` 노드). `obstacle_max_height` 기본값은 차체 높이 + 5 cm 이라, 그보다 낮게 떠 있는 공중 장애물은 피해 갑니다.
+
+### 화면에서 보기
+
+- **센서 측정** 레이어: 3D 센서가 맞힌 점(센서 색). 바닥에 맞은 점은 흐리게, 바닥 위·아래는 진하게.
+- **인식 결과** 레이어: 확정된 장애물(채운 사각형), 후보(흐린 점), 단차(×).
+- 오른쪽 **센서 · 인식**: ToF 존 히트맵, Depth 축소 영상, 거리 막대, 확정 개수, **인식 지우기**.
+
+## 새 센서 종류 만들기
+
+센서 종류는 파이썬 파일 하나입니다. 기본 종류는 `navstudio/sensortypes/` 에 있고, 직접 만든 종류는 `~/.navstudio/sensor_types/*.py` 에 둡니다.
+
+1. 센서 라이브러리 → **템플릿 만들기**. 설명이 달린 예제(IR 거리 센서 배열)가 `~/.navstudio/sensor_types/my_sensor.py` 로 생깁니다. 종류 id 는 파일 이름입니다.
+2. 파일을 고칩니다.
+3. **다시 읽기** (또는 navstudio 재시작). 오류가 있으면 라이브러리에 파일 이름과 함께 표시되고, 나머지 앱은 그대로 동작합니다.
+4. 라이브러리에서 그 종류로 새 센서를 만들어 저장하고, 로봇에 답니다. 다음에 시작하는 시뮬레이션부터 쓰입니다.
+
+파일이 정의할 것 (`navstudio/sensortypes/base.py`):
+
+```python
+from navstudio.sensortypes.base import Measurement, Param, SensorType
+
+class MySensor(SensorType):
+    type = 'my_sensor'              # 로봇 파일에 저장되는 id. 한 번 쓰면 바꾸지 마세요
+    label = '내 센서'
+    description = '...'
+    defaults_override = dict(hz=20.0, range_max=2.0)       # 공통 파라미터 기본값 바꾸기
+    params = [Param('spread_deg', '펼친 각도', 60.0, min=1, max=180, unit='°', group='배치')]
+    fov = ('spread_deg', None)      # 편집기에 그릴 가로 / 세로 시야 파라미터
+
+    def rays(self, p): ...                        # 센서 프레임의 단위 광선 (n, 3)
+    def measure(self, p, rays, t, rng): ...       # t: 광선별 첫 교차 거리 (inf = 없음) -> Measurement
+    def outputs(self, name): ...                  # [(토픽, 'sensor_msgs/PointCloud2'), ...]
+    def publish(self, p, m, pubs, header, mount): ...
+    perception_input = ('points', 'points')       # 인식 노드가 읽을 것: ('points' | 'zones', 토픽 끝)
+    def perceive(self, mount, data, cfg): ...     # (장애물 후보 (k,2), 단차 후보 (j,2)) base_link
+    def floor_seen(self, mount, data, cfg): ...   # 선택: 지금 보이는 바닥 (확정 장애물 지우기)
+
+SENSOR = MySensor()
+```
+
+- **Param**: `kind` 는 `float`, `int`, `bool`, `color`, `zones`(존 마스크). `min`·`max` 로 값이 검사되고, `group` 별로 폼이 묶입니다. 공통 파라미터(`hz`, `range_min`, `range_max`, `noise`, `dropout`, `color`)는 자동으로 붙습니다.
+- **Measurement**: `points` (센서 프레임 점), `raw` (종류별 원래 출력), `hit_index` (화면에 그릴 광선), `vis` (오른쪽 패널 표시: `{zones, nx, ny}` 격자, `{w, h, depth}` 영상, `{range}` 거리 하나, `{ranges}` 거리 목록 중 하나).
+- **계산 비용**: 광선 수 × 주기가 CPU 를 씁니다. 수천 광선 × 수십 Hz 까지는 무난합니다.
+- **시험**: `tests/unit/test_sensors.py` 의 템플릿 테스트처럼 `rays → measure → perceive` 를 ROS 없이 돌려 볼 수 있습니다.
+
+## 한계
+
+- RGB·의미 영상은 만들지 않습니다. Depth 는 거리만 있고 재질·반사율·햇빛 간섭은 없습니다 (잡음은 거리 비례·제곱 비례 모델).
+- ToF 존 거리는 존 안 광선들의 신호 가중 평균(1/r²)입니다. 실제 센서의 다중 타깃·히스토그램 처리는 단순화했습니다.
+- 바닥은 평평하고 단차는 수직 벽입니다. 경사로·카펫·반사 바닥은 없습니다.

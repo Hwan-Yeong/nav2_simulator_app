@@ -48,6 +48,7 @@ class Tof(SensorType):
     description = '존마다 가장 가까운 물체까지의 거리(센서 x 축 방향)를 냅니다. 1×1 이면 1D ToF, 4×4·8×8 이면 멀티존.'
     defaults_override = dict(hz=15.0, range_min=0.02, range_max=4.0, noise=0.005, color='#d9480f')
     perception_input = ('zones', 'zones')
+    fov = ('fov_h_deg', 'fov_v_deg')
     params = [
         Param('zones_x', '가로 존 수', 8, kind='int', min=1, max=16, step=1, group='존'),
         Param('zones_y', '세로 존 수', 8, kind='int', min=1, max=16, step=1, group='존'),

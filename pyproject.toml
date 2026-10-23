@@ -43,7 +43,7 @@ include = ["navstudio*"]
 navstudio = [
   "launch/*.py",
   "web/*.html", "web/css/*", "web/js/*", "web/img/*", "web/vendor/three/*",
-  "data/*.yaml", "data/base/*", "data/stacks/*", "data/robots/*", "data/presets/*", "data/scenarios/*", "data/sensors/*",
+  "data/*.yaml", "data/sensor_type_template.py", "data/base/*", "data/stacks/*", "data/robots/*", "data/presets/*", "data/scenarios/*", "data/sensors/*",
   "data/maps/*", "data/maps/*/*",
   "data/plugins_src/*/*", "data/plugins_src/*/*/*", "data/plugins_src/*/*/*/*", "data/plugins_src/*/*/*/*/*",
 ]

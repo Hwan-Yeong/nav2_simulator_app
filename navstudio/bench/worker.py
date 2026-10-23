@@ -44,11 +44,17 @@ class Client(Node):
         self.pub = self.create_publisher(String, '/sim/cmd', q)
         self.create_subscription(String, '/sim/reply', lambda m: self.replies.append(json.loads(m.data)), q)
         self.create_subscription(Path, '/plan', self._plan, 10)
+        self.create_subscription(String, '/sim/state', self._state, 10)
+        self.fallen = False
         self.nav = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         self.clr = [self.create_client(ClearEntireCostmap, s) for s in
                     ('/local_costmap/clear_entirely_local_costmap', '/global_costmap/clear_entirely_global_costmap')]
         self.replies = []
         self.plans = []
+
+    def _state(self, msg):
+        if '"fallen": true' in msg.data:       # cheap check; the state is JSON at 20 Hz
+            self.fallen = True
 
     def _plan(self, msg):
         if len(self.plans) < 200:
@@ -156,6 +162,7 @@ def run_episode(cli, ep, pids, max_time):
         except psutil.Error:
             pass
     cli.plans = []
+    cli.fallen = False
     t0 = time.monotonic()
     send = cli.nav.send_goal_async(g, feedback_callback=on_fb)
     while not send.done() and time.monotonic() - t0 < 10:
@@ -164,13 +171,22 @@ def run_episode(cli, ep, pids, max_time):
         return dict(status='rejected')
     gh = send.result()
     res = gh.get_result_async()
-    status = None
+    status, fell = None, False
     while time.monotonic() - t0 < max_time:
         rclpy.spin_once(cli, timeout_sec=0.05)
         if res.done():
             status = res.result().status
             break
-    if status is None:
+        if cli.fallen:                       # fell into a drop: the robot cannot move any more, stop the episode now
+            fell = True
+            break
+    if fell:
+        cf = gh.cancel_goal_async()
+        end = time.monotonic() + 5
+        while time.monotonic() < end and not (cf.done() and res.done()):
+            rclpy.spin_once(cli, timeout_sec=0.05)
+        stat = 'fell'
+    elif status is None:
         cf = gh.cancel_goal_async()
         end = time.monotonic() + 5
         while time.monotonic() < end and not (cf.done() and res.done()):

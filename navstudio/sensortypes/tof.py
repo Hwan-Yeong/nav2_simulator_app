@@ -153,5 +153,13 @@ class Tof(SensorType):
         drops = np.where(floor[:, None], g['floor_pts'][z], pb[:, :2])[drop]
         return pb[obstacle, :2], drops
 
+    def floor_seen(self, mount, grid, cfg):
+        g = self._geom(mount)
+        z = g['zones']
+        dist = np.asarray(grid, float)[z]
+        ok = dist > 0
+        pb = np.stack([dist, dist * g['ty'][z], dist * g['tz'][z]], axis=1) @ g['rot'].T + g['pos']
+        return pb[ok & (np.abs(pb[:, 2]) < cfg['obstacle_min_height']), :2]
+
 
 SENSOR = Tof()

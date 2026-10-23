@@ -17,6 +17,8 @@ groups:
     label: 경로 계획
   - id: control
     label: 목표·진행 판정
+  - id: perception
+    label: 센서 인식 (낮은 장애물·단차)
 
 params:
   # ---------------------------------------------------------------- speed (DWB / RotationShim)
@@ -79,3 +81,13 @@ params:
   - {id: goal_yaw, group: control, label: 목표 방향 허용 오차, node: controller_server, path: general_goal_checker.yaw_goal_tolerance, type: float, min: 0.05, max: 3.15, step: 0.05, unit: rad, help: 3.14 = 방향 무시}
   - {id: progress_time, group: control, label: 진행 판정 시간, node: controller_server, path: progress_checker.movement_time_allowance, type: float, min: 2, max: 60, step: 1, unit: s, help: 이 시간 동안 아래 거리만큼 못 움직이면 실패}
   - {id: progress_radius, group: control, label: 진행 판정 거리, node: controller_server, path: progress_checker.required_movement_radius, type: float, min: 0.05, max: 2.0, step: 0.05, unit: m}
+  # ---------------------------------------------------------------- range-sensor perception (robots with perception mode 'rules')
+  - {id: perc_min_h, group: perception, label: 장애물 최소 높이, node: navstudio_perception, path: obstacle_min_height, type: float, min: 0.005, max: 0.2, step: 0.005, unit: m, help: 바닥에서 이보다 높게 맞은 점을 장애물로 봄. 낮추면 문턱도 잡지만 바닥 잡음에 민감}
+  - {id: perc_max_h, group: perception, label: 장애물 최대 높이, node: navstudio_perception, path: obstacle_max_height, type: float, min: 0.1, max: 2.0, step: 0.05, unit: m, help: 이보다 높은 점은 무시 (로봇이 아래로 지나감). 기본은 차체 높이 + 5 cm}
+  - {id: perc_drop_depth, group: perception, label: 단차 최소 깊이, node: navstudio_perception, path: drop_min_depth, type: float, min: 0.005, max: 0.3, step: 0.005, unit: m}
+  - {id: perc_drop_diff, group: perception, label: 단차 거리 차이, node: navstudio_perception, path: drop_range_diff, type: float, min: 0.01, max: 0.5, step: 0.01, unit: m, help: ToF 존 거리가 예상 바닥 거리보다 이만큼 멀면 단차}
+  - {id: perc_confirm, group: perception, label: 확정 프레임 수, node: navstudio_perception, path: confirm_frames, type: int, min: 1, max: 10, step: 1, help: 연속으로 이만큼 보여야 costmap 에 올림. 늘리면 오검출이 줄고 반응이 늦어짐}
+  - {id: perc_lidar_r, group: perception, label: 라이다 중복 제거 반경, node: navstudio_perception, path: lidar_check_radius, type: float, min: 0.0, max: 0.5, step: 0.01, unit: m, help: 라이다가 이미 본 곳 근처의 후보는 버림}
+  - {id: perc_range, group: perception, label: 인식 거리, node: navstudio_perception, path: max_range, type: float, min: 0.3, max: 4.0, step: 0.1, unit: m}
+  - {id: perc_drop_line, group: perception, label: 단차 표시 길이 (반), node: navstudio_perception, path: drop_line_length, type: float, min: 0.0, max: 0.5, step: 0.01, unit: m, help: 단차 점마다 진행 방향에 수직으로 그리는 선의 반길이}
+  - {id: perc_clear_r, group: perception, label: 바닥 재관측 지움 반경, node: navstudio_perception, path: clear_radius, type: float, min: 0.0, max: 0.3, step: 0.01, unit: m, help: 확정된 장애물 근처에서 바닥이 다시 보이면 지움 (단차는 지우지 않음). 0 = 지우지 않음}

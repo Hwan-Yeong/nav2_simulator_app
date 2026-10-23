@@ -15,6 +15,8 @@ Ultrasonic    a return within max_range -> obstacle on the cone axis
 Then: obstacle candidates within lidar_check_radius of a lidar return are dropped (the lidar already sees them),
 a candidate must be seen confirm_frames times in a row (within merge_radius) to be confirmed, and confirmed points
 stay in the map frame until /perception/clear (the server sends it on a new run, teleport or scene change).
+With clear_on_floor, a confirmed obstacle is removed when a sensor sees bare floor within clear_radius of it and no
+current candidate is near (a false mark or a removed object does not trap the robot). Drops are never cleared that way.
 
 Topics: in  /sim/truth, /sensors/<name>/zones|points, /scan or /scan_<name>, /perception/clear
         out /perception/obstacles, /perception/drops (PointCloud2, map, z = 0.05), /perception/state (JSON, 5 Hz)
@@ -32,7 +34,7 @@ from navstudio import robot as robotlib, sensortypes
 DEFAULTS = dict(rate_hz=10.0, obstacle_min_height=0.02, obstacle_max_height=1.0, vertical_pair_dist=0.035,
                 drop_min_depth=0.03, drop_range_diff=0.08, drop_on_no_return=True, drop_line_length=0.10,
                 lidar_check_radius=0.10, confirm_frames=2, merge_radius=0.04, max_range=1.5,
-                min_neighbors=3, neighbor_radius=0.05)
+                min_neighbors=3, neighbor_radius=0.05, clear_on_floor=True, clear_radius=0.05)
 
 
 class Perception:
@@ -50,6 +52,7 @@ class Perception:
         self.pending = {'obstacle': (np.zeros((0, 2)), np.zeros(0, int)), 'drop': (np.zeros((0, 2)), np.zeros(0, int))}
         self.confirmed = {'obstacle': np.zeros((0, 2)), 'drop': np.zeros((0, 2))}
         self.last_candidates = {'obstacle': np.zeros((0, 2)), 'drop': np.zeros((0, 2))}
+        self.last_floor = np.zeros((0, 2))
 
     def clear(self):
         self.pending = {k: (np.zeros((0, 2)), np.zeros(0, int)) for k in self.pending}
@@ -69,10 +72,20 @@ class Perception:
         obs, drops = np.concatenate(obs), np.concatenate(drops)
         near = lambda a: a[np.hypot(a[:, 0], a[:, 1]) <= p['max_range']] if len(a) else a
         obs, drops = near(obs), near(drops)
+        self.last_floor = near(self.floor())
         if len(obs) and len(self.lidar_base) and p['lidar_check_radius'] > 0:
             dist, _ = cKDTree(self.lidar_base).query(obs, distance_upper_bound=p['lidar_check_radius'])
             obs = obs[~np.isfinite(dist)]
         return obs, drops
+
+    def floor(self):
+        """Bare floor seen now (base_link x-y), from every sensor type that reports it."""
+        out = [np.zeros((0, 2))]
+        for name, m in self.mounts.items():
+            d = self.data.get(name)
+            if d is not None:
+                out.append(np.asarray(sensortypes.get(m['type']).floor_seen(m, d, self.p), float).reshape(-1, 2))
+        return np.concatenate(out)
 
     # ------------------------------------------------------------ confirmation (map frame)
     def step(self, pose):
@@ -102,6 +115,14 @@ class Perception:
                     pts = pts[~np.isfinite(dist)]
                 self.confirmed[kind] = _thin(np.concatenate([conf, pts]), r) if len(pts) else conf
             self.pending[kind] = (cand[~done], nh[~done])
+        conf, floor = self.confirmed['obstacle'], to_map(self.last_floor)
+        if self.p['clear_on_floor'] and len(conf) and len(floor):
+            seen, _ = cKDTree(floor).query(conf, distance_upper_bound=self.p['clear_radius'])
+            gone = np.isfinite(seen)
+            if gone.any() and len(new['obstacle']):
+                held, _ = cKDTree(new['obstacle']).query(conf, distance_upper_bound=2 * r)
+                gone &= ~np.isfinite(held)
+            self.confirmed['obstacle'] = conf[~gone]
 
     def summary(self):
         return {k: int(len(v)) for k, v in self.confirmed.items()}

@@ -1,7 +1,7 @@
 // Application state shared by the workspaces.
 //
 // Up to 4 live slots (A–D) share the map, robot and scene; each has its own driving stack + parameter changes (cfg)
-// and its own Nav2 session. S.sel.stack/values/raw/preset and S.stack/nav/sim/applied/warnings always refer to the
+// and its own Nav2 session. In a comparison a slot may run another robot (cfg.robotId, e.g. another sensor layout). S.sel.stack/values/raw/preset and S.stack/nav/sim/applied/warnings always refer to the
 // active slot, so the single-session panels edit and show whichever slot is selected.
 import { persist } from './ui.js';
 
@@ -14,7 +14,7 @@ const savedSlots = persist('slots') || [];
 function newSlot(i) {
   const legacy = i === 0 ? { stack: savedSel.stack, values: savedSel.values, raw: savedSel.raw, preset: savedSel.preset } : {};   // before 0.2
   const given = Object.fromEntries(Object.entries(savedSlots[i] || legacy).filter(([, v]) => v !== undefined && v !== null));
-  const cfg = Object.assign({ stack: 'prod', values: {}, raw: '', preset: null }, given);
+  const cfg = Object.assign({ stack: 'prod', values: {}, raw: '', preset: null, robotId: null }, given);
   return { idx: i, cfg, applied: null, stack: { status: 'stopped', message: '' }, nav: null, sim: null, warnings: [], pending: false };
 }
 
@@ -42,9 +42,18 @@ const L = {};
 export const on = (ev, fn) => (L[ev] = L[ev] || []).push(fn);
 export const emit = (ev, d) => (L[ev] || []).forEach((f) => f(d));
 
-export function slotKey(i) {
+// the robot a slot runs: its own (comparison only) or the shared selection -> {robot_id, robot}
+export function slotRobot(i) {
   const c = S.slots[i].cfg;
-  return JSON.stringify({ map: S.sel.map, robotId: S.sel.robot ? null : S.sel.robotId, robot: S.sel.robot, stack: c.stack,
+  if (S.nSlots > 1 && c.robotId) return { robot_id: c.robotId, robot: null };
+  return { robot_id: S.sel.robot ? null : S.sel.robotId, robot: S.sel.robot };
+}
+export const slotRobotOwn = (i) => S.nSlots > 1 && !!S.slots[i].cfg.robotId;
+export const robotName = (id) => (S.robots.find((r) => r.id === id) || {}).name || id;
+
+export function slotKey(i) {
+  const c = S.slots[i].cfg, r = slotRobot(i);
+  return JSON.stringify({ map: S.sel.map, robotId: r.robot_id, robot: r.robot, stack: c.stack,
     values: c.values, raw: (c.raw || '').trim() });
 }
 export const selKey = () => slotKey(S.active);

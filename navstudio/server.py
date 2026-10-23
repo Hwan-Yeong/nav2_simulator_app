@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import __version__, configsets, maps, paramgen, paths, robot as robotlib, schema
+from . import __version__, configsets, maps, paramgen, paths, robot as robotlib, schema, sensors as sensorlib
 from .stack import MAX_SLOTS, Stack
 
 
@@ -272,6 +272,58 @@ def robot_delete(rid: str):
 @app.get('/api/stacks')
 def stacks():
     return paramgen.list_stacks()
+
+
+# ------------------------------------------------------------------ sensors: type plugins and the model library
+@app.get('/api/sensor-types')
+def sensor_types():
+    from . import sensortypes
+    return dict(types=sensortypes.schemas(), errors=sensortypes.errors)
+
+
+@app.get('/api/sensors')
+def sensor_models():
+    return sensorlib.list_models()
+
+
+@app.post('/api/sensors')
+def sensor_create(body: dict):
+    try:
+        return sensorlib.save_model(body)
+    except Exception as e:
+        _bad(e)
+
+
+@app.put('/api/sensors/{mid}')
+def sensor_save(mid: str, body: dict):
+    try:
+        return sensorlib.save_model(body, mid)
+    except PermissionError as e:
+        _bad(e, 403)
+    except Exception as e:
+        _bad(e)
+
+
+@app.delete('/api/sensors/{mid}')
+def sensor_delete(mid: str):
+    try:
+        sensorlib.delete_model(mid)
+    except KeyError:
+        _bad('직접 만든 센서만 지울 수 있습니다', 404)
+    return dict(ok=True)
+
+
+@app.post('/api/sensors/mount')
+def sensor_mount(body: dict):
+    """A new mount of a library model: {model, name, x, y, ...} -> normalized mount (pose from the model's hint)."""
+    try:
+        model = sensorlib.get_model(body['model'])
+        pose = {k: body[k] for k in sensorlib.POSE if k in body}
+        return sensorlib.mount_from_model(model, body.get('name') or model['type'], **pose)
+    except KeyError:
+        _bad('센서 모델이 없습니다', 404)
+    except Exception as e:
+        _bad(e)
 
 
 # ------------------------------------------------------------------ config sets (stack + parameter changes)
@@ -594,6 +646,10 @@ async def ws(sock: WebSocket):
                 if seq.get(k) and seq.get(k) != st['seq'].get(k) and snap['perception'] is not None:
                     st['seq'][k] = seq[k]
                     after.append(dict(type='perception', slot=s.idx, **snap['perception']))
+                k = 'sensors'
+                if seq.get(k) and seq.get(k) != st['seq'].get(k) and snap['sensors'] is not None:
+                    st['seq'][k] = seq[k]
+                    after.append(dict(type='sensors', slot=s.idx, sensors=snap['sensors']))
                 new = [l for l in snap['logs'] if l['seq'] > st['log']]
                 if new:
                     st['log'] = new[-1]['seq']

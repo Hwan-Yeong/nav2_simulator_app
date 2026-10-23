@@ -55,6 +55,7 @@ class Bridge(Node):
         self.pub_cmd = self.create_publisher(String, '/sim/cmd', rel)
         self.pub_perception_clear = self.create_publisher(Empty, '/perception/clear', rel)
         self.perception = None
+        self.sensors = None                  # latest range-sensor views (sent by sim2d at 5 Hz inside the state)
         self.create_subscription(String, '/perception/state', self._on_perception, 10)
         self.create_subscription(String, '/sim/state', self._on_state, 10)
         self.create_subscription(String, '/sim/reply', lambda m: self.replies.append(json.loads(m.data)), rel)
@@ -76,6 +77,10 @@ class Bridge(Node):
             self.sim_state = json.loads(msg.data)
             self.sim_state_t = time.monotonic()
             self.seq['state'] += 1
+            sensors = self.sim_state.pop('sensors', None)
+            if sensors is not None:
+                self.sensors = sensors
+                self.seq['sensors'] += 1
 
     def _on_perception(self, msg):
         with self.lock:
@@ -203,13 +208,14 @@ class Bridge(Node):
             self.plans = {'global': None, 'local': None}
             self.costmaps = {'global': None, 'local': None}
             self.perception = None
+            self.sensors = None
             self.nav.update(status='idle', recoveries=0, distance_remaining=None, nav_time=0.0, goal=None)
             self.seq['reset'] += 1
 
     def snapshot(self):
         with self.lock:
             return dict(sim=self.sim_state, sim_age=time.monotonic() - self.sim_state_t if self.sim_state_t else None,
-                        nav=dict(self.nav), seq=dict(self.seq), plans=dict(self.plans), perception=self.perception,
+                        nav=dict(self.nav), seq=dict(self.seq), plans=dict(self.plans), perception=self.perception, sensors=self.sensors,
                         costmaps=dict(self.costmaps), logs=list(self.logs), log_seq=self.log_seq)
 
 

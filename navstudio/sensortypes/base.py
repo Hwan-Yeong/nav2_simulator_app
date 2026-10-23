@@ -121,3 +121,8 @@ class SensorType:
     # ---- perception
     def perceive(self, mount, data, cfg):
         return np.zeros((0, 2)), np.zeros((0, 2))
+
+    def floor_seen(self, mount, data, cfg):
+        """Where this sensor sees bare floor now (base_link x-y). Confirmed obstacles there are cleared
+        (perception param clear_on_floor). Default: none, so marks from this type are only cleared by /perception/clear."""
+        return np.zeros((0, 2))

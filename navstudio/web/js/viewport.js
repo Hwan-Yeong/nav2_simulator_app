@@ -1,9 +1,22 @@
-// 2D world viewport: map, costmaps, paths, scan, robot, scene objects, editing tools.
+// 2D world viewport: map, costmaps, paths, scan, range-sensor hits, perception marks, robot, scene objects, editing tools.
+// Scene objects are 2.5D: obstacles have z0..z1 (default 0..1 m: low obstacles, overhangs), 'cliff' rects are drops.
 import { cssVar } from './ui.js';
 
 const TAU = Math.PI * 2;
 let gid = 1;
 export const newGroupId = () => `g${Date.now().toString(36)}${(gid++).toString(36)}`;
+
+export const OBS_TOP = 1.0;           // obstacles without a height reach 1 m (same as the simulator)
+export const obsZ = (o) => [o.z0 ?? 0, o.z1 ?? OBS_TOP];
+// short height label for an obstacle: '' for ordinary floor-standing ones
+export function heightLabel(o) {
+  if (o.type === 'cliff') return `단차 ${Math.round((o.depth ?? 0.3) * 100)} cm`;
+  const [z0, z1] = obsZ(o);
+  const cm = (v) => (v < 1 ? `${Math.round(v * 100)} cm` : `${+v.toFixed(2)} m`);
+  if (z0 > 0.001) return `공중 ${cm(z0)}–${cm(z1)}`;
+  if (z1 < 0.3) return `높이 ${cm(z1)}`;
+  return '';
+}
 
 export function robotPolygon(profile, n = 32) {
   const fp = profile.footprint;
@@ -27,15 +40,17 @@ export class Viewport {
     this.view = { cx: 0, cy: 0, s: 40 };
     this.map = null;          // {meta, img (offscreen canvas)}
     this.costmaps = { global: null, local: null };
-    this.layers = Object.assign({ map: true, global: true, local: true, scan: true, plan: true, trail: true, grid: false, others: true }, opts.layers || {});
+    this.layers = Object.assign({ map: true, global: true, local: true, scan: true, sensors: true, perception: true, plan: true, trail: true, grid: false, others: true }, opts.layers || {});
     this.scene = { static_obs: [], dyn_obs: [], start: null, goal: null };
     this.live = null;         // sim state
+    this.sensors = null;      // latest range-sensor views {name: {type, hits, ...}} (5 Hz)
+    this.perception = null;   // perception node state {confirmed: {obstacle, drop}, candidates, counts}
     this.plans = { global: null, local: null };
     this.robot = null;        // profile
     this.robotColor = null;   // overrides --robot (comparison slots)
     this.trail = [];
     this.tool = 'select';
-    this.toolOpts = { poleR: 0.1, chairSize: 0.45, pedSpeed: 0.6, pedR: 0.22 };
+    this.toolOpts = { poleR: 0.1, poleZ1: OBS_TOP, chairSize: 0.45, pedSpeed: 0.6, pedR: 0.22, boxZ0: 0, boxZ1: OBS_TOP, cliffDepth: 0.3 };
     this.follow = false;
     this.sel = null;          // selected object ref {kind:'static'|'dyn', idx, g}
     this.drag = null;
@@ -62,7 +77,7 @@ export class Viewport {
       free: v('--map-free'), occ: v('--map-occ'), unk: v('--map-unk'), stage: v('--stage'), robot: v('--robot'),
       plan: v('--plan'), lplan: v('--lplan'), scan: v('--scan'), ped: v('--ped'), obs: v('--obs'), obsInk: v('--obs-ink'),
       trail: v('--trail'), goal: v('--goal'), start: v('--start'), ink: v('--ink'), muted: v('--muted'), line: v('--line'),
-      bad: v('--bad'), accent: v('--accent'), panel: v('--panel'),
+      bad: v('--bad'), accent: v('--accent'), panel: v('--panel'), cliff: v('--cliff'), perc: v('--perc'),
     };
     this.dark = document.documentElement.getAttribute('data-theme') === 'dark' ||
       (!document.documentElement.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
@@ -164,6 +179,8 @@ export class Viewport {
     this.costmaps = { global: null, local: null };
     this.plans = { global: null, local: null };
     this.live = null;
+    this.sensors = null;
+    this.perception = null;
     this.trail = [];
     this.dirty = true;
   }
@@ -236,6 +253,7 @@ export class Viewport {
       }
     }
     if (this.layers.grid) this._grid();
+    this._cliffs();
     this._staticObs();
     if (this.layers.others && this.opts.others) {
       for (const o of this.opts.others(this)) if (o.trail.length > 1) this._poly(o.trail, o.color, 2, 0.55);
@@ -249,10 +267,12 @@ export class Viewport {
       const r = Math.max(1.2, Math.min(2.6, s * 0.03));
       for (const p of this.live.scan) { const [x, y] = this.toS(p[0], p[1]); g.fillRect(x - r / 2, y - r / 2, r, r); }
     }
+    if (this.layers.perception && this.perception) this._perception();
+    if (this.layers.sensors && this.sensors && this.live) this._sensorHits();
     if (this.scene.start && !(this.live && this.live.pose)) this._ghostRobot(this.scene.start);
     this._marker(this.scene.start, this.startBad ? this.col.bad : this.col.start, 'S');
     this._goal(this.scene.goal);
-    if (this.live && this.live.pose) this._robot(this.live.pose, this.live.contact);
+    if (this.live && this.live.pose) this._robot(this.live.pose, this.live.contact || this.live.fallen);
     this._preview();
     this.opts.onDraw && this.opts.onDraw(this);
   }
@@ -278,17 +298,87 @@ export class Viewport {
   _staticObs() {
     const g = this.ctx, s = this.view.s;
     this.scene.static_obs.forEach((o, i) => {
+      if (o.type === 'cliff') return;
       const selected = this.sel && this.sel.kind === 'static' && (this.sel.idx === i || (this.sel.g && o.g === this.sel.g));
+      const [z0, z1] = obsZ(o);
+      const over = z0 > 0.001, low = !over && z1 < 0.3;
       g.fillStyle = this.col.obs; g.strokeStyle = selected ? this.col.accent : this.col.obsInk; g.lineWidth = selected ? 2.5 : 1;
-      if (o.type === 'circle') {
-        const [x, y] = this.toS(o.x, o.y);
-        g.beginPath(); g.arc(x, y, Math.max(o.r * s, 1.5), 0, TAU); g.fill(); g.stroke();
-      } else {
-        const { cx, cy, w, h, yaw } = rectOf(o);
-        g.save(); const [x, y] = this.toS(cx, cy); g.translate(x, y); g.rotate(-(yaw || 0));
-        g.fillRect(-w * s / 2, -h * s / 2, w * s, h * s); g.strokeRect(-w * s / 2, -h * s / 2, w * s, h * s); g.restore();
+      g.globalAlpha = over ? 0.25 : low ? 0.55 : 1;
+      const shape = () => {
+        g.beginPath();
+        if (o.type === 'circle') { const [x, y] = this.toS(o.x, o.y); g.arc(x, y, Math.max(o.r * s, 1.5), 0, TAU); return [x, y, o.r * s * 2]; }
+        const { cx, cy, w, h, yaw } = rectOf(o), [x, y] = this.toS(cx, cy), c = Math.cos(-(yaw || 0)), n = Math.sin(-(yaw || 0));
+        [[-w, -h], [w, -h], [w, h], [-w, h]].forEach(([a, b], k) => { const px = x + (a * c - b * n) * s / 2, py = y + (a * n + b * c) * s / 2; k ? g.lineTo(px, py) : g.moveTo(px, py); });
+        g.closePath();
+        return [x, y, Math.min(w, h) * s];
+      };
+      const [lx, ly, size] = shape();
+      g.fill(); g.globalAlpha = 1;
+      if (over) g.setLineDash([5, 3]);
+      g.stroke(); g.setLineDash([]);
+      const lab = heightLabel(o);
+      if (lab && (size > 26 || selected)) {
+        g.font = '600 10px var(--f-ui), sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        g.fillStyle = this.col.obsInk; g.fillText(lab, lx, ly);
+        g.textAlign = 'start'; g.textBaseline = 'alphabetic';
       }
     });
+  }
+
+  // drops: hatched area, the depth as a label
+  _cliffs() {
+    const g = this.ctx, s = this.view.s;
+    this.scene.static_obs.forEach((o, i) => {
+      if (o.type !== 'cliff') return;
+      const selected = this.sel && this.sel.kind === 'static' && this.sel.idx === i;
+      const [a, b] = [this.toS(o.x0, o.y1), this.toS(o.x1, o.y0)];
+      const w = b[0] - a[0], hh = b[1] - a[1];
+      g.save();
+      g.fillStyle = this.col.cliff; g.globalAlpha = 0.28; g.fillRect(a[0], a[1], w, hh); g.globalAlpha = 0.7;
+      g.beginPath(); g.rect(a[0], a[1], w, hh); g.clip();
+      g.strokeStyle = this.col.cliff; g.lineWidth = 1; g.beginPath();
+      for (let k = -hh; k < w; k += 8) { g.moveTo(a[0] + k, a[1] + hh); g.lineTo(a[0] + k + hh, a[1]); }
+      g.stroke(); g.restore();
+      g.strokeStyle = selected ? this.col.accent : this.col.cliff; g.lineWidth = selected ? 2.5 : 1.5; g.strokeRect(a[0], a[1], w, hh);
+      if (Math.min(w, hh) > 22 || selected) {
+        g.font = '600 10px var(--f-ui), sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+        const lab = heightLabel(o), tw = g.measureText(lab).width + 8;
+        g.fillStyle = this.col.panel; g.globalAlpha = 0.85; g.fillRect(a[0] + w / 2 - tw / 2, a[1] + hh / 2 - 7, tw, 14); g.globalAlpha = 1;
+        g.fillStyle = this.col.cliff; g.fillText(lab, a[0] + w / 2, a[1] + hh / 2);
+        g.textAlign = 'start'; g.textBaseline = 'alphabetic';
+      }
+      void s;
+    });
+  }
+
+  // where the range sensors hit (map frame, 5 Hz), each in its sensor colour
+  _sensorHits() {
+    const g = this.ctx, cols = Object.fromEntries(((this.robot && this.robot.sensors) || []).map((sn) => [sn.name, sn.color]));
+    const r = Math.max(1.5, Math.min(3, this.view.s * 0.02));
+    for (const [name, v] of Object.entries(this.sensors)) {
+      if (!v || !v.hits || !v.hits.length) continue;
+      g.fillStyle = cols[name] || this.col.scan;
+      for (const p of v.hits) {           // floor returns faint and small; things above or below the floor solid
+        const floor = Math.abs(p[2] || 0) < 0.015;
+        g.globalAlpha = floor ? 0.3 : 0.95;
+        const [x, y] = this.toS(p[0], p[1]), rr = floor ? r * 0.6 : r;
+        g.beginPath(); g.arc(x, y, rr, 0, TAU); g.fill();
+      }
+    }
+    g.globalAlpha = 1;
+  }
+
+  // confirmed perception marks: low obstacles (filled squares) and drops (crosses); candidates faint
+  _perception() {
+    const g = this.ctx, p = this.perception, h = Math.max(2, Math.min(5, this.view.s * 0.025));
+    const cand = p.candidates || {}, conf = p.confirmed || {};
+    g.globalAlpha = 0.35; g.fillStyle = this.col.perc;
+    for (const q of cand.obstacle || []) { const [x, y] = this.toS(q[0], q[1]); g.fillRect(x - h / 2, y - h / 2, h, h); }
+    g.globalAlpha = 1; g.strokeStyle = this.col.ink; g.lineWidth = 0.75;
+    for (const q of conf.obstacle || []) { const [x, y] = this.toS(q[0], q[1]); g.fillRect(x - h, y - h, 2 * h, 2 * h); g.strokeRect(x - h, y - h, 2 * h, 2 * h); }
+    g.strokeStyle = this.col.cliff; g.lineWidth = 1.5; g.beginPath();
+    for (const q of conf.drop || []) { const [x, y] = this.toS(q[0], q[1]); g.moveTo(x - h, y - h); g.lineTo(x + h, y + h); g.moveTo(x + h, y - h); g.lineTo(x - h, y + h); }
+    g.stroke();
   }
 
   _peds() {
@@ -324,7 +414,9 @@ export class Viewport {
     const reach = Math.max(...poly.map((p) => p[0]));
     g.strokeStyle = stroke; g.lineWidth = 2; g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.max(reach, 0.1) * s, 0); g.stroke();
     for (const sn of this.robot.sensors || []) {
-      g.fillStyle = this.col.ink; g.beginPath(); g.arc(sn.x * s, -sn.y * s, Math.max(2, 0.03 * s), 0, TAU); g.fill();
+      if (sn.enabled === false) continue;
+      g.fillStyle = sn.color || this.col.ink; g.strokeStyle = this.col.ink; g.lineWidth = 1;
+      g.beginPath(); g.arc(sn.x * s, -sn.y * s, Math.max(2, Math.min(5, 0.012 * s)), 0, TAU); g.fill(); g.stroke();
     }
     g.restore(); g.globalAlpha = 1;
   }
@@ -358,7 +450,7 @@ export class Viewport {
     g.strokeStyle = this.col.accent; g.lineWidth = 2; g.setLineDash([6, 4]);
     if (d.kind === 'box') {
       const [a, b] = [this.toS(d.x0, d.y0), this.toS(d.x1, d.y1)];
-      g.fillStyle = this.col.obs; g.globalAlpha = 0.4; g.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]); g.globalAlpha = 1;
+      g.fillStyle = d.cliff ? this.col.cliff : this.col.obs; g.globalAlpha = 0.4; g.fillRect(a[0], a[1], b[0] - a[0], b[1] - a[1]); g.globalAlpha = 1;
       g.strokeRect(a[0], a[1], b[0] - a[0], b[1] - a[1]);
     } else if (d.kind === 'person' && d.pts) {
       const pts = [...d.pts, this.mouseW];
@@ -392,7 +484,7 @@ export class Viewport {
     window.addEventListener('keydown', (e) => {
       if (e.target.closest && e.target.closest('input, textarea, select')) return;
       if ((e.key === 'Delete' || e.key === 'Backspace') && this.sel) { this._deleteSel(); e.preventDefault(); }
-      if (e.key === 'Escape') { this.drag = null; this.sel = null; this.dirty = true; }
+      if (e.key === 'Escape') { this.drag = null; if (this.sel) { this.sel = null; this.opts.onSelect && this.opts.onSelect(this, null); } this.dirty = true; }
       if (e.key === 'Enter' && this.drag && this.drag.kind === 'person') this._finishPerson();
     });
   }
@@ -419,12 +511,13 @@ export class Viewport {
       const hit = this._hit(wx, wy);
       this.sel = hit;
       this.move = { wx, wy, moved: false };
+      this.opts.onSelect && this.opts.onSelect(this, hit);
     } else if (t === 'start' || t === 'goal') {
       this.drag = { kind: 'pose', which: t, x: wx, y: wy };
-    } else if (t === 'box') {
-      this.drag = { kind: 'box', x0: wx, y0: wy, x1: wx, y1: wy };
+    } else if (t === 'box' || t === 'cliff') {
+      this.drag = { kind: 'box', cliff: t === 'cliff', x0: wx, y0: wy, x1: wx, y1: wy };
     } else if (t === 'pole') {
-      this.scene.static_obs.push({ type: 'circle', x: r3(wx), y: r3(wy), r: this.toolOpts.poleR });
+      this.scene.static_obs.push({ type: 'circle', x: r3(wx), y: r3(wy), r: this.toolOpts.poleR, ...heights(0, this.toolOpts.poleZ1) });
       this._changed();
     } else if (t === 'chair') {
       const g = newGroupId(), a = this.toolOpts.chairSize / 2;
@@ -480,7 +573,10 @@ export class Viewport {
       const w = Math.abs(d.x1 - d.x0), h = Math.abs(d.y1 - d.y0);
       this.drag = null;
       if (w > 0.03 && h > 0.03) {
-        this.scene.static_obs.push({ type: 'rect', x0: r3(Math.min(d.x0, d.x1)), y0: r3(Math.min(d.y0, d.y1)), x1: r3(Math.max(d.x0, d.x1)), y1: r3(Math.max(d.y0, d.y1)) });
+        const r = { x0: r3(Math.min(d.x0, d.x1)), y0: r3(Math.min(d.y0, d.y1)), x1: r3(Math.max(d.x0, d.x1)), y1: r3(Math.max(d.y0, d.y1)) };
+        const o = d.cliff ? { type: 'cliff', ...r, depth: this.toolOpts.cliffDepth } : { type: 'rect', ...r, ...heights(this.toolOpts.boxZ0, this.toolOpts.boxZ1) };
+        this.scene.static_obs.push(o);
+        if (this.opts.onSelect) { this.sel = { kind: 'static', idx: this.scene.static_obs.length - 1 }; this.opts.onSelect(this, this.sel); }
         this._changed();
       }
     }
@@ -498,9 +594,12 @@ export class Viewport {
 
   _hit(wx, wy) {
     const so = this.scene.static_obs;
-    for (let i = so.length - 1; i >= 0; i--) {
-      const o = so[i];
-      if (o.type === 'circle' ? Math.hypot(wx - o.x, wy - o.y) <= Math.max(o.r, 6 / this.view.s) : inRect(o, wx, wy)) return { kind: 'static', idx: i, g: o.g };
+    for (const cliffs of [false, true]) {
+      for (let i = so.length - 1; i >= 0; i--) {
+        const o = so[i];
+        if ((o.type === 'cliff') !== cliffs) continue;
+        if (o.type === 'circle' ? Math.hypot(wx - o.x, wy - o.y) <= Math.max(o.r, 6 / this.view.s) : inRect(o, wx, wy)) return { kind: 'static', idx: i, g: o.g };
+      }
     }
     const dy = this.scene.dyn_obs;
     for (let i = dy.length - 1; i >= 0; i--) {
@@ -528,6 +627,7 @@ export class Viewport {
     else if (s.g) this.scene.static_obs = this.scene.static_obs.filter((o) => o.g !== s.g);
     else this.scene.static_obs.splice(s.idx, 1);
     this.sel = null;
+    this.opts.onSelect && this.opts.onSelect(this, null);
     this._changed();
   }
 
@@ -539,6 +639,13 @@ export class Viewport {
 }
 
 function r3(v) { return Math.round(v * 1000) / 1000; }
+// z0/z1 only when they differ from the default (floor to 1 m), so ordinary scenes stay as before
+function heights(z0, z1) {
+  const o = {};
+  if (z0 > 0.0005) o.z0 = r3(z0);
+  if (Math.abs(z1 - OBS_TOP) > 0.0005) o.z1 = r3(z1);
+  return o;
+}
 function rectOf(o) {
   if ('x0' in o) return { cx: (o.x0 + o.x1) / 2, cy: (o.y0 + o.y1) / 2, w: o.x1 - o.x0, h: o.y1 - o.y0, yaw: 0 };
   return { cx: o.cx, cy: o.cy, w: o.w, h: o.h, yaw: o.yaw || 0 };

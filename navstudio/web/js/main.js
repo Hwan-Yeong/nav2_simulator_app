@@ -3,6 +3,7 @@ import { api, Live } from './api.js';
 import { S, on, emit, isDirty, isDirtySlot, visibleSlots, mapName, stackOf } from './state.js';
 import { h, icon, toast, initTheme, persist } from './ui.js';
 import * as sim from './sim.js';
+import { loadSensorCatalog } from './sensors.js';
 
 const $ = (id) => document.getElementById(id);
 const workspaces = {};
@@ -11,6 +12,7 @@ async function loadCatalog() {
   const [info, maps, robots, stacks, presets] = await Promise.all([
     api.get('/api/info'), api.get('/api/maps'), api.get('/api/robots'), api.get('/api/stacks'), api.get('/api/presets')]);
   Object.assign(S, { info, maps, robots, stacks, presets });
+  await loadSensorCatalog();
   if (!maps.find((m) => m.id === S.sel.map)) S.sel.map = maps[0].id;
   if (!robots.find((r) => r.id === S.sel.robotId)) S.sel.robotId = 'everybot';
   for (const sl of S.slots) {
@@ -117,6 +119,8 @@ async function main() {
     plan: (m) => emit('plan', m),
     costmap: (m) => emit('costmap', m),
     log: (m) => emit('log', m),
+    sensors: (m) => emit('sensors', m),
+    perception: (m) => emit('perception', m),
     reset: (m) => emit('reset', m),
     disconnected: () => { for (const s of S.slots) if (s.stack.status !== 'stopped') s.stack = { status: 'error', message: '서버 연결이 끊겼습니다. 다시 연결 중…' }; renderTop(); },
   });

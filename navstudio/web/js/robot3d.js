@@ -1,8 +1,9 @@
-// three.js preview of a robot profile (body extruded from the footprint, wheels, lidars with FOV fans).
+// three.js preview of a robot profile (body extruded from the footprint, wheels, sensors with their fields of view).
 import * as THREE from 'three';
 import { OrbitControls } from '/static/vendor/three/OrbitControls.js';
 import { robotPolygon } from './viewport.js';
 import { cssVar } from './ui.js';
+import { rotation, fovFootprint, zoneCentres, rayEnd } from './sensors.js';
 
 export class Robot3D {
   constructor(container) {
@@ -105,19 +106,46 @@ export class Robot3D {
     if (p.drive === 'diff') { wheel(0, tw); wheel(0, -tw); }
     else if (p.drive === 'omni') { const L = (p.wheels.wheelbase || 0.4) / 2; for (const sx of [L, -L]) { wheel(sx, tw); wheel(sx, -tw); } }
     else { const L = p.wheels.wheelbase || 0.5; wheel(0, tw); wheel(0, -tw); const st = (p.wheels.max_steer_deg || 0) * Math.PI / 360; wheel(L, tw, st); wheel(L, -tw, st); }
-    // lidars
+    // sensors: lidar puck + scan fan; others a small housing + field of view down to the floor (ToF: one ray per zone)
     for (const s of p.sensors || []) {
-      const puck = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.045, 24), new THREE.MeshStandardMaterial({ color: 0x14181c, roughness: 0.4 }));
-      puck.rotation.x = Math.PI / 2;
-      puck.position.set(s.x, s.y, s.z);
-      puck.castShadow = true;
-      this.group.add(puck);
-      const fov = Math.min(360, s.fov_deg) * Math.PI / 180;
-      const yaw = (s.yaw_deg || 0) * Math.PI / 180;
-      const fan = new THREE.Mesh(new THREE.CircleGeometry(Math.min(s.range_max, fanR), 48, yaw - fov / 2, fov),
-        new THREE.MeshBasicMaterial({ color: new THREE.Color(cssVar('--scan')), transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false }));
-      fan.position.set(s.x, s.y, s.z);
-      this.group.add(fan);
+      const col = new THREE.Color(s.color || cssVar('--scan'));
+      const dim = s.enabled === false ? 0.35 : 1;
+      if (s.type === 'lidar2d') {
+        const puck = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.045, 24), new THREE.MeshStandardMaterial({ color: 0x14181c, roughness: 0.4 }));
+        puck.rotation.x = Math.PI / 2;
+        puck.position.set(s.x, s.y, s.z);
+        puck.castShadow = true;
+        this.group.add(puck);
+        const fov = Math.min(360, s.fov_deg) * Math.PI / 180;
+        const yaw = (s.yaw_deg || 0) * Math.PI / 180;
+        const fan = new THREE.Mesh(new THREE.CircleGeometry(Math.min(s.range_max, fanR), 48, yaw - fov / 2, fov),
+          new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.12 * dim, side: THREE.DoubleSide, depthWrite: false }));
+        fan.position.set(s.x, s.y, s.z);
+        this.group.add(fan);
+        continue;
+      }
+      const Rm = rotation(s);
+      const m4 = new THREE.Matrix4().set(Rm[0][0], Rm[0][1], Rm[0][2], s.x, Rm[1][0], Rm[1][1], Rm[1][2], s.y, Rm[2][0], Rm[2][1], Rm[2][2], s.z, 0, 0, 0, 1);
+      const sz = s.type === 'depth' ? [0.025, 0.09, 0.025] : [0.012, 0.022, 0.014];
+      const box = new THREE.Mesh(new THREE.BoxGeometry(...sz), new THREE.MeshStandardMaterial({ color: 0x14181c, roughness: 0.4 }));
+      box.applyMatrix4(m4);
+      this.group.add(box);
+      const L = Math.min(s.range_max, 1.2);
+      const o = new THREE.Vector3(s.x, s.y, s.z);
+      const fp = fovFootprint(s, L).map((r) => new THREE.Vector3(...r.p));
+      const lmat = new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.7 * dim });
+      this.group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([...fp, fp[0]]), lmat));
+      const n = fp.length / 4;
+      const edges = [0, n, 2 * n, 3 * n].flatMap((k) => [o, fp[k]]);
+      if (s.type === 'tof' && s.zones_x * s.zones_y > 1) {
+        for (const z of zoneCentres(s).filter((q) => q.on)) edges.push(o, new THREE.Vector3(...rayEnd(s, z.ty, z.tz, L).p));
+      }
+      this.group.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(edges), new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.35 * dim })));
+      // translucent fill of the volume: a fan of triangles from the mount to the outline
+      const tri = [];
+      for (let k = 0; k < fp.length; k++) tri.push(o, fp[k], fp[(k + 1) % fp.length]);
+      this.group.add(new THREE.Mesh(new THREE.BufferGeometry().setFromPoints(tri),
+        new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.08 * dim, side: THREE.DoubleSide, depthWrite: false })));
     }
   }
 

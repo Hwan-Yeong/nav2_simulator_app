@@ -1,6 +1,6 @@
 // Benchmark workspace: compare configurations over many scenarios, inspect and replay episodes.
 import { api } from './api.js';
-import { S, emit, mapName, stackOf, cfgLabel, SLOT_NAMES } from './state.js';
+import { S, emit, mapName, stackOf, cfgLabel, slotRobot, slotRobotOwn, robotName, SLOT_NAMES } from './state.js';
 import { h, icon, btn, toast, modal, menu, fmt, persist, DRIVE_LABEL } from './ui.js';
 import { Viewport } from './viewport.js';
 
@@ -33,8 +33,8 @@ export function currentConfig(name = '현재 시뮬레이션 설정') {
 
 // the configurations of the live comparison slots (simulation workspace), as benchmark configs
 export function slotConfigs() {
-  return S.slots.slice(0, S.nSlots).map((sl, i) => ({ name: `${SLOT_NAMES[i]} · ${cfgLabel(i).name}`, robot_id: S.sel.robot ? null : S.sel.robotId,
-    robot: S.sel.robot, stack: sl.cfg.stack, values: { ...sl.cfg.values }, raw: sl.cfg.raw || '' }));
+  return S.slots.slice(0, S.nSlots).map((sl, i) => ({ name: `${SLOT_NAMES[i]} · ${cfgLabel(i).name}${slotRobotOwn(i) ? ` · ${robotName(sl.cfg.robotId)}` : ''}`,
+    ...slotRobot(i), stack: sl.cfg.stack, values: { ...sl.cfg.values }, raw: sl.cfg.raw || '' }));
 }
 
 // config sets and stack defaults to pick from (menu items); pick(cfg) receives a benchmark config

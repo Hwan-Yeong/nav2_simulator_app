@@ -3,7 +3,7 @@
 // One to four live slots (A–D) run side by side. They share the map, robot and scene; each slot has its own stack and
 // parameter changes, its own view and its own Nav2 session. The left panels edit the active slot.
 import { api, inflate } from './api.js';
-import { S, on, emit, slotKey, isDirty, isDirtySlot, saveSel, mapName, stackOf, presetOf, cfgLabel, visibleSlots, MAX_SLOTS, SLOT_NAMES } from './state.js';
+import { S, on, emit, slotKey, slotRobot, slotRobotOwn, robotName, isDirty, isDirtySlot, saveSel, mapName, stackOf, presetOf, cfgLabel, visibleSlots, MAX_SLOTS, SLOT_NAMES } from './state.js';
 import { h, icon, btn, toast, modal, menu, confirmDlg, fmt, debounce, persist, diffHtml, cssVar, DRIVE_LABEL } from './ui.js';
 import { Viewport, robotPolygon } from './viewport.js';
 
@@ -31,6 +31,7 @@ export function initSim() {
       onMouse: (x, y) => { mouse = [x, y]; if (vps.some((o) => o.move || o.drag)) vps.forEach((o) => { o.dirty = true; }); },
       onFollowChange: () => renderRunbar(),
       onActivate: (o) => setActive(vps.indexOf(o)),
+      onSelect: (o, hit) => showSelected(hit),
       others: (o) => (S.nSlots < 2 ? [] : vps.slice(0, S.nSlots).filter((x) => x !== o).map((x) => ({ trail: x.trail, color: slotColor(vps.indexOf(x)) }))),
     });
     if (i) { v.view = vps[0].view; v.layers = vps[0].layers; v.toolOpts = vps[0].toolOpts; }
@@ -53,7 +54,19 @@ export function initSim() {
     if (!v || !liveOnMap(m.slot)) return;
     try { v.setCostmap(m.which, m, await inflate(m.z)); } catch (e) { window.__err = `costmap ${m.which}: ${e.message}`; console.error(e); }
   });
-  on('reset', (m) => { if (vps[m.slot]) vps[m.slot].clearLive(); });
+  on('reset', (m) => { if (vps[m.slot]) vps[m.slot].clearLive(); S.slots[m.slot].sensors = null; S.slots[m.slot].perception = null; });
+  on('sensors', (m) => {
+    if (!vps[m.slot] || !liveOnMap(m.slot)) return;
+    vps[m.slot].sensors = m.sensors; vps[m.slot].dirty = true;
+    S.slots[m.slot].sensors = m.sensors;
+    if (m.slot === S.active) renderSensorView();
+  });
+  on('perception', (m) => {
+    if (!vps[m.slot] || !liveOnMap(m.slot)) return;
+    vps[m.slot].perception = m; vps[m.slot].dirty = true;
+    S.slots[m.slot].perception = m;
+    if (m.slot === S.active) renderSensorView();
+  });
   on('log', (m) => { logs.push(...m.items.map((l) => ({ ...l, slot: m.slot }))); if (logs.length > 300) logs.splice(0, logs.length - 300); renderLogs(); });
   window.addEventListener('keydown', (e) => {   // 1–4: make that slot active (comparison only)
     if (e.target.closest('input, textarea, select') || e.ctrlKey || e.metaKey || e.altKey || $('ws-sim').hidden) return;
@@ -72,6 +85,20 @@ const sparks = [];
 export function liveOnMap(i) { const a = S.slots[i].applied; return a !== null && JSON.parse(a).map === S.sel.map; }
 const readySlots = () => visibleSlots().filter((s) => s.stack.status === 'ready' && liveOnMap(s.idx));
 const eachVp = (f) => vps.forEach(f);
+
+// robot profiles of comparison slots that run their own robot
+const robotCache = {};
+async function profileOf(id) {
+  if (!robotCache[id]) robotCache[id] = (await api.get(`/api/robots/${id}`)).profile;
+  return robotCache[id];
+}
+const slotProfile = (i) => (slotRobotOwn(i) ? robotCache[S.slots[i].cfg.robotId] : S.robotProfile) || S.robotProfile;
+async function refreshSlotRobots() {
+  for (const [i, v] of vps.entries()) {
+    v.robot = slotRobotOwn(i) ? await profileOf(S.slots[i].cfg.robotId).catch(() => S.robotProfile) : S.robotProfile;
+    v.dirty = true;
+  }
+}
 
 function setScene(sc) { S.scene = sc; eachVp((v) => { v.scene = sc; v.sel = null; v.dirty = true; }); }
 
@@ -105,6 +132,7 @@ async function setSlotCount(n) {
   S.nSlots = n;
   if (S.active >= n) S.active = 0;
   saveSel();
+  await refreshSlotRobots();
   applyLayout();
   requestAnimationFrame(() => { resizeViews(); av().fit(); });
   renderRunbar();
@@ -157,7 +185,7 @@ export async function selectRobot(id, profile = null) {
   S.sel.robot = profile;
   const p = profile ? { profile } : await api.get(`/api/robots/${id}`);
   S.robotProfile = p.profile;
-  eachVp((v) => { v.robot = p.profile; v.dirty = true; });
+  eachVp((v, i) => { if (!slotRobotOwn(i)) { v.robot = p.profile; v.dirty = true; } });
   for (const sl of S.slots) {
     const st = stackOf(sl.cfg.stack);
     if (st && !st.drives.includes(S.robotProfile.drive)) {
@@ -183,7 +211,7 @@ export async function selectStack(id) {
 
 async function loadSchema() {
   try {
-    S.schema = await api.post('/api/params/schema', { robot_id: S.sel.robot ? null : S.sel.robotId, robot: S.sel.robot, stack: S.sel.stack });
+    S.schema = await api.post('/api/params/schema', { ...slotRobot(S.active), stack: S.sel.stack });
   } catch (e) { S.schema = null; toast(e.message, 'bad'); }
   renderParams();
 }
@@ -208,8 +236,7 @@ const tag = (i) => (S.nSlots > 1 ? `슬롯 ${SLOT_NAMES[i]}: ` : '');
 export async function startSlot(i) {
   const sl = S.slots[i];
   const c = sl.cfg;
-  const body = { slot: i, map: S.sel.map, robot_id: S.sel.robot ? null : S.sel.robotId, robot: S.sel.robot, stack: c.stack,
-    values: c.values, raw_overrides: c.raw || '', start: S.scene.start };
+  const body = { slot: i, map: S.sel.map, ...slotRobot(i), stack: c.stack, values: c.values, raw_overrides: c.raw || '', start: S.scene.start };
   sl.stack = { status: 'starting', message: 'Nav2 시작 중' };
   sl.pending = true;
   emit('stack');
@@ -262,8 +289,12 @@ export function adoptServer(slots, scene) {
   S.sel.map = c0.map;
   S.sel.robotId = c0.robot_id || S.sel.robotId;
   S.sel.robot = c0.robot_id ? null : c0.robot;
-  for (const s of running) Object.assign(S.slots[s.slot].cfg, { stack: s.config.stack, values: s.config.values || {}, raw: s.config.raw_overrides || '' });
+  for (const s of running) {
+    Object.assign(S.slots[s.slot].cfg, { stack: s.config.stack, values: s.config.values || {}, raw: s.config.raw_overrides || '' });
+    S.slots[s.slot].cfg.robotId = s.config.robot_id && s.config.robot_id !== c0.robot_id ? s.config.robot_id : null;
+  }
   S.nSlots = Math.max(S.nSlots, ...running.map((s) => s.slot + 1));
+  refreshSlotRobots();
   for (const s of running) S.slots[s.slot].applied = slotKey(s.slot);
   if (scene && scene.map === c0.map) S.scene = { static_obs: scene.static_obs || [], dyn_obs: scene.dyn_obs || [], start: scene.start, goal: scene.goal };
   saveSel();
@@ -370,8 +401,9 @@ const TOOLS = [
   ['start', 'start', '출발점 (드래그로 방향)'],
   ['goal', 'goal', '목표 (드래그로 방향) — 실행 중이면 바로 주행'],
   null,
-  ['box', 'box', '박스 (드래그)'],
+  ['box', 'box', '박스 (드래그) — 높이: 낮은 턱·공중 장애물'],
   ['pole', 'pole', '기둥'],
+  ['cliff', 'cliff', '단차·낭떠러지 (드래그)'],
   ['chair', 'chair', '의자 (다리 4개)'],
   ['person', 'person', '보행자 (두 점 클릭: 왕복 경로)'],
   ['eraser', 'eraser', '지우개'],
@@ -383,7 +415,7 @@ function initTools() {
     'aria-pressed': String(vps[0].tool === t[0]), onclick: () => setTool(t[0]) }) : h('hr')));
   window.addEventListener('keydown', (e) => {
     if (e.target.closest('input, textarea, select') || e.ctrlKey || e.metaKey) return;
-    const k = { v: 'select', h: 'pan', s: 'start', g: 'goal', b: 'box', p: 'pole', c: 'chair', w: 'person', e: 'eraser' }[e.key.toLowerCase()];
+    const k = { v: 'select', h: 'pan', s: 'start', g: 'goal', b: 'box', p: 'pole', d: 'cliff', c: 'chair', w: 'person', e: 'eraser' }[e.key.toLowerCase()];
     if (k && $('ws-sim').hidden === false) setTool(k);
   });
 }
@@ -401,11 +433,14 @@ function setTool(t) {
   const tips = {
     start: '맵을 누른 채 끌어서 로봇 방향을 정합니다. 실행 중이면 로봇이 그 자리로 옮겨집니다.',
     goal: S.nSlots > 1 ? '맵을 누른 채 끌어서 도착 방향을 정합니다. 실행 중이면 모든 로봇이 출발점에서 동시에 출발합니다.' : '맵을 누른 채 끌어서 도착 방향을 정합니다. 실행 중이면 바로 출발합니다.',
-    box: '드래그해서 맵에 없는 박스를 놓습니다. 라이다에는 보이지만 맵에는 없습니다.',
     eraser: '지울 장애물이나 보행자 경로를 누르세요.',
     select: '장애물을 끌어 옮기고 Delete 로 지웁니다. 빈 곳을 끌면 화면이 움직입니다.',
   };
-  if (t === 'pole') o.replaceChildren(h('h4', { text: '기둥' }), field('반지름', 'poleR', 0.02, 0.5, 0.01, ' m'));
+  if (t === 'box') o.replaceChildren(h('h4', { text: '박스' }), ...heightFields(opts, 'boxZ0', 'boxZ1'),
+    h('div', { class: 'hint', text: '드래그해서 맵에 없는 박스를 놓습니다. 라이다는 자기 높이에 걸리는 것만 봅니다. 낮은 턱·공중 장애물은 ToF·Depth 같은 센서와 인식 처리가 있어야 피합니다.' }));
+  else if (t === 'cliff') o.replaceChildren(h('h4', { text: '단차' }), field('깊이', 'cliffDepth', 0.01, 1.0, 0.01, ' m'),
+    h('div', { class: 'hint', text: '바닥이 꺼진 곳 (계단·낭떠러지). 로봇 중심이 들어가면 떨어져 멈춥니다 (등반 높이보다 얕으면 지나감). 라이다로는 안 보이고, 바닥을 보는 ToF·Depth 로 감지합니다.' }));
+  else if (t === 'pole') o.replaceChildren(h('h4', { text: '기둥' }), field('반지름', 'poleR', 0.02, 0.5, 0.01, ' m'), field('높이', 'poleZ1', 0.02, 2.0, 0.01, ' m'));
   else if (t === 'chair') o.replaceChildren(h('h4', { text: '의자' }), field('다리 간격', 'chairSize', 0.3, 0.8, 0.01, ' m'), h('div', { class: 'hint', text: '지름 5 cm 다리 4개. 2D 라이다로는 잘 안 보이는 장애물입니다.' }));
   else if (t === 'person') o.replaceChildren(h('h4', { text: '보행자' }), field('속도', 'pedSpeed', 0.1, 1.5, 0.05, ' m/s'), field('반지름', 'pedR', 0.1, 0.4, 0.01, ' m'),
     h('div', { class: 'hint', text: '시작점과 끝점을 누르면 그 사이를 왕복합니다 (Shift 로 경유점 추가). 로봇 앞에서는 멈춰 양보합니다.' }));
@@ -414,7 +449,40 @@ function setTool(t) {
   o.hidden = false;
 }
 
-const LAYERS = [['global', '전역 costmap', '--plan'], ['local', '지역 costmap', '--lplan'], ['scan', '라이다', '--scan'], ['plan', '경로', '--plan'], ['trail', '궤적', '--trail'],
+// obstacle heights: presets + z0 / z1 (bottom / top above the floor)
+const HEIGHT_PRESETS = [['일반', 0, 1.0, '바닥부터 1 m'], ['낮은 턱', 0, 0.05, '높이 5 cm: 라이다 아래'], ['문턱', 0, 0.015, '1.5 cm: 넘어갈 수 있는지는 등반 높이에 따라'],
+  ['공중', 0.65, 0.75, '0.65–0.75 m: 테이블 상판처럼 떠 있음']];
+function heightFields(obj, k0, k1, onchange = () => {}) {
+  const z0 = h('input', { type: 'number', step: 0.005, min: 0, max: 3, value: obj[k0] ?? 0, 'aria-label': '아래 높이' });
+  const z1 = h('input', { type: 'number', step: 0.005, min: 0.005, max: 3, value: obj[k1] ?? 1.0, 'aria-label': '위 높이' });
+  const seg = h('div', { class: 'seg wrap' }, ...HEIGHT_PRESETS.map(([lab, a, b, tip]) => h('button', { title: tip, 'aria-pressed': String(Math.abs((obj[k0] ?? 0) - a) < 1e-3 && Math.abs((obj[k1] ?? 1) - b) < 1e-3),
+    onclick: (e) => { obj[k0] = a; obj[k1] = b; z0.value = a; z1.value = b; for (const x of seg.children) x.setAttribute('aria-pressed', String(x === e.currentTarget)); onchange(); } }, lab)));
+  const upd = () => { const a = +z0.value, b = +z1.value; if (b > a) { obj[k0] = a; obj[k1] = b; for (const x of seg.children) x.setAttribute('aria-pressed', 'false'); onchange(); } };
+  z0.oninput = upd; z1.oninput = upd;
+  return [seg, h('div', { class: 'grid2' }, h('label', { class: 'field' }, h('span', { text: '아래 z0 (m)' }), z0), h('label', { class: 'field' }, h('span', { text: '위 z1 (m)' }), z1))];
+}
+
+// select tool: edit the height / depth of the picked obstacle
+function showSelected(hit) {
+  const o = $('toolOpts');
+  if (vps[0].tool !== 'select' && !(hit && ['box', 'cliff'].includes(vps[0].tool))) return;
+  const ob = hit && hit.kind === 'static' ? S.scene.static_obs[hit.idx] : null;
+  if (!ob || ob.g) { if (vps[0].tool === 'select') setTool('select'); return; }
+  const done = () => { for (const k of ['z0', 'z1']) if (k in ob && ((k === 'z0' && ob.z0 <= 0.0005) || (k === 'z1' && Math.abs(ob.z1 - 1.0) < 0.0005))) delete ob[k]; sceneEdited(); };
+  const del = btn('지우기', { cls: 'sm ghost danger', icon: 'trash', onclick: () => { S.scene.static_obs.splice(S.scene.static_obs.indexOf(ob), 1); eachVp((v) => { v.sel = null; }); sceneEdited(); setTool(vps[0].tool); } });
+  if (ob.type === 'cliff') {
+    const d = h('input', { type: 'number', step: 0.01, min: 0.005, max: 3, value: ob.depth ?? 0.3, oninput: (e) => { const v = +e.target.value; if (v > 0) { ob.depth = v; sceneEdited(); } } });
+    o.replaceChildren(h('h4', { text: '선택한 단차' }), h('label', { class: 'field' }, h('span', { text: '깊이 (m)' }), d), del);
+  } else {
+    const tmp = { z0: ob.z0 ?? 0, z1: ob.z1 ?? 1.0 };
+    o.replaceChildren(h('h4', { text: ob.type === 'circle' ? '선택한 기둥' : '선택한 박스' }),
+      ...heightFields(tmp, 'z0', 'z1', () => { ob.z0 = tmp.z0; ob.z1 = tmp.z1; done(); }), del);
+  }
+  o.hidden = false;
+}
+
+const LAYERS = [['global', '전역 costmap', '--plan'], ['local', '지역 costmap', '--lplan'], ['scan', '라이다', '--scan'], ['sensors', '센서 측정', '--accent'],
+  ['perception', '인식 결과', '--perc'], ['plan', '경로', '--plan'], ['trail', '궤적', '--trail'],
   ['others', '다른 슬롯 궤적', '--s1', true], ['grid', '격자', '--muted']];
 function initLayers() {
   Object.assign(vps[0].layers, persist('layers') || {});
@@ -465,7 +533,7 @@ function renderLayersIfNeeded() { if (layersFor !== S.nSlots) { layersFor = S.nS
 
 // comparison slot header: what runs there, its state, start/stop and drive controls
 export function renderSlotHeads(force = false) {
-  const sig = JSON.stringify([S.nSlots, S.presets.length, visibleSlots().map((s) => [s.stack.status, isDirtySlot(s.idx), cfgLabel(s.idx), (s.nav || {}).status, liveOnMap(s.idx)])]);
+  const sig = JSON.stringify([S.nSlots, S.presets.length, visibleSlots().map((s) => [s.stack.status, isDirtySlot(s.idx), cfgLabel(s.idx), (s.nav || {}).status, liveOnMap(s.idx), slotRobotOwn(s.idx) && s.cfg.robotId])]);
   if (!force && sig === lastHeads) return;
   lastHeads = sig;
   for (let i = 0; i < MAX_SLOTS; i++) {
@@ -483,6 +551,7 @@ export function renderSlotHeads(force = false) {
       h('b', { class: 'slotbadge', text: SLOT_NAMES[i] }),
       h('button', { class: 'cfgname', title: '이 슬롯의 설정 세트 바꾸기', onclick: (e) => { e.stopPropagation(); slotMenu(i, e.currentTarget); } },
         h('span', { text: lab.name + (lab.modified ? ' *' : '') }), h('span', { html: icon('chevron') })),
+      slotRobotOwn(i) ? h('span', { class: 'tag', title: '이 슬롯만 다른 로봇', text: robotName(sl.cfg.robotId) }) : '',
       h('span', { class: 'sst', 'data-state': state, title: sl.stack.message || '' }, h('i'), state === 'dirty' ? '변경됨' : STACK_LABEL[st] || st),
       h('span', { class: 'grow' }),
       ib(st === 'ready' ? 'restart' : 'play', st === 'ready' ? (dirty ? '변경 적용 (재시작)' : '재시작') : '시작', () => startSlot(i), st === 'starting', dirty || st !== 'ready' ? 'go' : ''),
@@ -495,10 +564,11 @@ export function renderSlotHeads(force = false) {
 }
 
 function slotMenu(i, anchor) {
-  const drive = S.robotProfile ? S.robotProfile.drive : 'diff';
+  const prof = slotProfile(i);
+  const drive = prof ? prof.drive : 'diff';
   const ok = (id) => { const st = stackOf(id); return !st || st.drives.includes(drive); };
   const cur = S.slots[i].cfg;
-  const assign = (cfg) => assignSlot(i, cfg);
+  const assign = (cfg) => assignSlot(i, { ...cfg, robotId: cur.robotId });
   menu(anchor, [
     { heading: `슬롯 ${SLOT_NAMES[i]} 설정 세트` },
     ...S.presets.map((p) => ({ label: p.name, sub: `${(stackOf(p.stack) || {}).name || p.stack}${p.description ? ' · ' + p.description : ''}`, tag: p.builtin ? '기본' : '내 세트',
@@ -509,13 +579,35 @@ function slotMenu(i, anchor) {
     'sep',
     ...(i !== S.active ? [{ label: `슬롯 ${SLOT_NAMES[S.active]} 설정 복사`, icon: 'copy', onclick: () => assign(JSON.parse(JSON.stringify(S.slots[S.active].cfg))) }] : []),
     { label: '파라미터 직접 편집', icon: 'sliders', onclick: async () => { await setActive(i); showLeftTab('params'); } },
+    { heading: `슬롯 ${SLOT_NAMES[i]} 로봇` },
+    { label: `공통 로봇 (${S.robotProfile ? S.robotProfile.name : robotName(S.sel.robotId)})`, sub: '로봇·스택 탭에서 고른 로봇', icon: 'robot', checked: !cur.robotId, onclick: () => setSlotRobot(i, null) },
+    ...S.robots.filter((r) => S.sel.robot || r.id !== S.sel.robotId).map((r) => ({ label: r.name, sub: r.description, tag: r.builtin ? '기본' : '내 로봇',
+      checked: cur.robotId === r.id, onclick: () => setSlotRobot(i, r.id) })),
   ]);
 }
 
+// a comparison slot runs another robot (e.g. another sensor layout); null = the shared one
+async function setSlotRobot(i, id) {
+  const sl = S.slots[i];
+  let prof = S.robotProfile;
+  if (id) { try { prof = await profileOf(id); } catch (e) { toast(e.message, 'bad'); return; } }
+  sl.cfg.robotId = id;
+  const st = stackOf(sl.cfg.stack);
+  if (st && prof && !st.drives.includes(prof.drive)) {
+    const alt = S.stacks.find((x) => x.drives.includes(prof.drive));
+    if (alt) { sl.cfg = { ...sl.cfg, stack: alt.id, values: {}, raw: '', preset: null }; toast(`${DRIVE_LABEL[prof.drive]} 로봇이라 슬롯 ${SLOT_NAMES[i]} 의 스택을 '${alt.name}' 으로 바꿨습니다`); }
+  }
+  vps[i].robot = prof; vps[i].dirty = true;
+  saveSel();
+  if (i === S.active) { await loadSchema(); renderSetupTab(); }
+  renderSlotHeads(true);
+  emit('sel'); emit('stack');
+}
+
 async function assignSlot(i, cfg) {
-  const st = stackOf(cfg.stack);
-  if (st && S.robotProfile && !st.drives.includes(S.robotProfile.drive)) { toast(`${DRIVE_LABEL[S.robotProfile.drive]} 로봇에는 '${st.name}' 을 쓸 수 없습니다`, 'bad'); return; }
-  S.slots[i].cfg = { stack: cfg.stack, values: { ...(cfg.values || {}) }, raw: cfg.raw || '', preset: cfg.preset || null };
+  const st = stackOf(cfg.stack), prof = slotProfile(i);
+  if (st && prof && !st.drives.includes(prof.drive)) { toast(`${DRIVE_LABEL[prof.drive]} 로봇에는 '${st.name}' 을 쓸 수 없습니다`, 'bad'); return; }
+  S.slots[i].cfg = { stack: cfg.stack, values: { ...(cfg.values || {}) }, raw: cfg.raw || '', preset: cfg.preset || null, robotId: cfg.robotId ?? S.slots[i].cfg.robotId ?? null };
   saveSel();
   if (i === S.active) { await loadSchema(); renderSetupTab(); }
   renderSlotHeads(true);
@@ -735,7 +827,8 @@ export async function renderSetupTab() {
     if (!profileCache[r.id]) { try { profileCache[r.id] = (await api.get(`/api/robots/${r.id}`)).profile; } catch (e) { profileCache[r.id] = null; } }
     return [r, profileCache[r.id]];
   }));
-  const drive = S.robotProfile ? S.robotProfile.drive : 'diff';
+  const own = slotProfile(S.active);
+  const drive = own ? own.drive : 'diff';
   const plugins = (S.info && S.info.plugins) || {};
   const robotList = h('div', { class: 'optlist' }, ...robots.map(([r, p]) => h('button', { class: 'opt', 'aria-pressed': String(!S.sel.robot && r.id === S.sel.robotId),
     onclick: () => selectRobot(r.id) }, p ? footprintIcon(p) : h('span'), h('div', { class: 't' }, h('b', {}, r.name, r.builtin ? '' : ' ', r.builtin ? '' : h('span', { class: 'tag', text: '내 로봇' })),
@@ -755,7 +848,8 @@ export async function renderSetupTab() {
   const multi = S.nSlots > 1 ? ` — 슬롯 ${SLOT_NAMES[S.active]}` : '';
   tab.replaceChildren(
     h('div', { class: 'sec' }, h('h3', {}, '로봇', btn('로봇 설계', { cls: 'sm ghost act', icon: 'edit', onclick: () => emit('goto', 'robot') })), robotList,
-      S.nSlots > 1 ? h('div', { class: 'hint', text: '로봇은 모든 슬롯이 같이 씁니다.' }) : ''),
+      S.nSlots > 1 ? h('div', { class: 'hint', text: '모든 슬롯이 같이 쓰는 로봇입니다. 슬롯마다 다른 로봇(센서 배치)으로 비교하려면 슬롯 머리글의 설정 이름 메뉴 아래쪽에서 고르세요.' +
+        visibleSlots().filter((x) => slotRobotOwn(x.idx)).map((x) => ` 슬롯 ${SLOT_NAMES[x.idx]}: ${robotName(x.cfg.robotId)}.`).join('') }) : ''),
     h('div', { class: 'sec' }, h('h3', { text: `주행 스택 (제어기 + 경로 계획기)${multi}` }), stackList),
     setsSection(drive),
   );
@@ -920,7 +1014,7 @@ function paramRow(p) {
 
 async function previewYaml() {
   try {
-    const r = await api.post('/api/params/preview', { robot_id: S.sel.robot ? null : S.sel.robotId, robot: S.sel.robot, stack: S.sel.stack, values: activeValues(), raw_overrides: S.sel.raw || '' });
+    const r = await api.post('/api/params/preview', { ...slotRobot(S.active), stack: S.sel.stack, values: activeValues(), raw_overrides: S.sel.raw || '' });
     const tabs = h('div', { class: 'seg' });
     const pre = h('pre', { class: 'code' });
     const show = (k) => { for (const b of tabs.children) b.setAttribute('aria-selected', String(b.dataset.k === k)); pre.innerHTML = k === 'diff' ? diffHtml(r.diff || '(운영 기본값과 같습니다)') : r.yaml.replace(/&/g, '&amp;').replace(/</g, '&lt;'); };
@@ -950,6 +1044,7 @@ export function renderTelemetry() {
         h('div', { class: 'navstate', id: 'tNav' }),
         h('div', { class: 'sec' }, h('h3', { text: '속도' }), sparkBox('v', '선속도', 'm/s'), sparkBox('w', '각속도', 'rad/s')),
         h('div', { class: 'sec' }, h('h3', { text: '안전' }), sparkBox('c', '장애물 이격', 'm'), h('dl', { class: 'kv', id: 'tSafe' })),
+        h('div', { class: 'sec', id: 'tSensors', hidden: true }),
         h('div', { class: 'sec' }, h('h3', { text: '이번 주행' }), h('dl', { class: 'kv', id: 'tRun' })),
         h('div', { class: 'sec', id: 'tWarn' })),
       h('div', { class: 'tele compare', hidden: true },
@@ -993,7 +1088,8 @@ function renderSingle() {
   $('tSafe').replaceChildren(
     h('dt', { text: '충돌' }), h('dd', { class: m.collisions ? 'bad' : '', text: m.collisions ?? '–' }),
     h('dt', { text: '최소 이격' }), h('dd', { class: m.min_clear < 0.05 ? 'warn' : '', text: m.min_clear !== undefined ? `${fmt.n(m.min_clear * 100, 1)} cm` : '–' }),
-    h('dt', { text: '근접(5cm) 시간' }), h('dd', { text: m.near_time !== undefined ? `${fmt.n(m.near_time, 1)} s` : '–' }));
+    h('dt', { text: '근접(5cm) 시간' }), h('dd', { text: m.near_time !== undefined ? `${fmt.n(m.near_time, 1)} s` : '–' }),
+    h('dt', { text: '낙하' }), h('dd', { class: m.falls ? 'bad' : '', text: m.falls ?? '–' }));
   $('tRun').replaceChildren(
     h('dt', { text: '시간' }), h('dd', { text: m.duration !== undefined ? fmt.t(m.duration) : '–' }),
     h('dt', { text: '주행 거리' }), h('dd', { text: m.path_len !== undefined ? `${fmt.n(m.path_len)} m` : '–' }),
@@ -1010,6 +1106,7 @@ const CMP_ROWS = [
   ['최소 이격', (m) => m.min_clear, (v) => `${fmt.n(v * 100, 1)} cm`, 'max'],
   ['근접(5cm) 시간', (m) => m.near_time, (v) => `${fmt.n(v, 1)} s`, 'min'],
   ['충돌', (m) => m.collisions, (v) => String(v), 'min'],
+  ['낙하', (m) => m.falls, (v) => String(v), 'min'],
   ['복구 동작', (m, sl) => (sl.result ? sl.result.recoveries : (sl.nav || {}).recoveries), (v) => String(v ?? 0), 'min'],
 ];
 
@@ -1106,6 +1203,80 @@ function drawMulti(id, k, slots) {
     d.forEach((v, i) => { const x = (i / 299) * r.width; i ? g.lineTo(x, y(v)) : g.moveTo(x, y(v)); });
     g.strokeStyle = col; g.lineWidth = 1.6; g.stroke();
     g.fillStyle = col; g.beginPath(); g.arc(((d.length - 1) / 299) * r.width, y(d[d.length - 1]), 2.5, 0, Math.PI * 2); g.fill();
+  }
+}
+
+// ================================================================== range sensors and perception of the active slot (5 Hz)
+let sensorSig = '';
+const sensorEls = {};
+function distColor(d, max) {           // near: red, far: blue; no return: blank
+  if (!(d > 0)) return null;
+  const t = Math.min(1, d / max);
+  return `hsl(${Math.round(t * 220)} 80% ${45 + t * 10}%)`;
+}
+function renderSensorView() {
+  const box = $('tSensors');
+  if (!box || S.nSlots > 1) return;
+  const sl = S.slots[S.active];
+  const data = sl.sensors || {}, perc = sl.perception;
+  const prof = vps[S.active].robot || S.robotProfile;
+  const mounts = Object.fromEntries(((prof && prof.sensors) || []).map((m) => [m.name, m]));
+  const names = Object.keys(data);
+  const sig = names.join(',') + '|' + !!perc + '|' + ((prof && prof.name) || '');
+  if (!names.length && !perc) { box.hidden = true; sensorSig = ''; return; }
+  box.hidden = false;
+  if (sig !== sensorSig) {
+    sensorSig = sig;
+    for (const k of Object.keys(sensorEls)) delete sensorEls[k];
+    const rows = names.map((n) => {
+      const v = data[n], el = { val: h('span', { class: 'num' }) };
+      let view = '';
+      if (v.type === 'tof' && v.nx * v.ny > 1) { el.cv = h('canvas', { class: 'zonemap', width: v.nx, height: v.ny }); view = el.cv; }
+      else if (v.type === 'depth') { el.cv = h('canvas', { class: 'depthmap', width: v.w, height: v.h }); view = el.cv; }
+      else { el.bar = h('i'); view = h('div', { class: 'rbar' }, el.bar); }
+      sensorEls[n] = el;
+      return h('div', { class: 'srow' }, h('div', { class: 'sname' }, h('i', { class: 'swatch', style: { background: (mounts[n] || {}).color || '#888' } }), h('b', { text: n }), el.val), view);
+    });
+    const percEl = perc ? h('div', { class: 'srow' }, h('div', { class: 'sname' }, h('b', { text: '인식 결과' }), (sensorEls._perc = h('span', { class: 'num' }))),
+      btn('인식 지우기', { cls: 'sm ghost', icon: 'eraser', title: '확정된 낮은 장애물·단차 표시와 costmap 을 지웁니다',
+        onclick: () => api.post('/api/sim/clear_costmaps', { slots: [S.active] }).catch((e) => toast(e.message, 'bad')) })) : '';
+    box.replaceChildren(h('h3', { text: '센서 · 인식' }), ...rows, percEl,
+      h('div', { class: 'hint', text: '색: 가까움(빨강) → 멂(파랑), 빈칸은 반사 없음. ToF·Depth 는 센서 뒤에서 본 모습입니다.' }));
+  }
+  for (const n of names) {
+    const v = data[n], el = sensorEls[n], m = mounts[n] || {};
+    if (!el) continue;
+    const max = Math.min(m.range_max || 4, 4);
+    if (el.cv && v.type === 'tof') {
+      const g = el.cv.getContext('2d'), on = m.zone_mask ? new Set(m.zone_mask) : null;
+      let near = Infinity;
+      for (let i = 0; i < v.ny; i++) for (let j = 0; j < v.nx; j++) {
+        const k = i * v.nx + j, d = v.zones[k];
+        if (on && !on.has(k)) { g.fillStyle = cssVar('--panel-3'); g.fillRect(j, i, 1, 1); continue; }
+        if (d > 0) near = Math.min(near, d);
+        g.fillStyle = distColor(d, max) || cssVar('--panel'); g.fillRect(j, i, 1, 1);
+      }
+      el.val.textContent = Number.isFinite(near) ? `최소 ${near.toFixed(2)} m` : '반사 없음';
+    } else if (el.cv && v.type === 'depth') {
+      const g = el.cv.getContext('2d');
+      if (el.cv.width !== v.w || el.cv.height !== v.h) { el.cv.width = v.w; el.cv.height = v.h; }
+      let near = Infinity;
+      for (let k = 0; k < v.depth.length; k++) {
+        const d = v.depth[k];
+        if (d > 0) near = Math.min(near, d);
+        g.fillStyle = distColor(d, max) || cssVar('--panel'); g.fillRect(k % v.w, Math.floor(k / v.w), 1, 1);
+      }
+      el.val.textContent = Number.isFinite(near) ? `최소 ${near.toFixed(2)} m` : '반사 없음';
+    } else {
+      const d = v.type === 'tof' ? (v.zones || [0])[0] : v.range;
+      el.val.textContent = d > 0 ? `${d.toFixed(2)} m` : '반사 없음';
+      el.bar.style.width = d > 0 ? `${Math.max(2, 100 * Math.min(1, d / max))}%` : '0';
+      el.bar.style.background = distColor(d, max) || 'transparent';
+    }
+  }
+  if (perc && sensorEls._perc) {
+    const c = perc.counts || {};
+    sensorEls._perc.textContent = `장애물 ${c.obstacle ?? 0} · 단차 ${c.drop ?? 0}`;
   }
 }
 

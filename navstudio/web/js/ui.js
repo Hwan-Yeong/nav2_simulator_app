@@ -11,6 +11,7 @@ const P = {
   goal: '<path d="M6 21V4"/><path d="M6 4h11l-2.5 4L17 12H6"/>',
   box: '<rect x="4.5" y="4.5" width="15" height="15" rx="1.5"/>',
   pole: '<circle cx="12" cy="12" r="5.5"/>',
+  cliff: '<path d="M3 8h8v11h10"/><path d="M13 11l-2 2M17 11l-6 6M21 11l-6 6M21 15l-2 2"/>',
   chair: '<circle cx="7" cy="7" r="1.8"/><circle cx="17" cy="7" r="1.8"/><circle cx="7" cy="17" r="1.8"/><circle cx="17" cy="17" r="1.8"/>',
   person: '<circle cx="12" cy="4.6" r="2.1"/><path d="M12 7.5v6.5l-3 7M12 14l3 7M7.5 10.5h9"/>',
   eraser: '<path d="M8 20h12"/><path d="M4 15.5l9.5-9.5 5.5 5.5-8 8H8z"/>',

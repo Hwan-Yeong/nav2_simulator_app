@@ -101,5 +101,13 @@ class Depth(SensorType):
         drops = pos[None, :2] + (low[:, :2] - pos[None, :2]) * (pos[2] / (pos[2] - low[:, 2]))[:, None] if len(low) else np.zeros((0, 2))
         return thin(obs, cfg['merge_radius']), thin(drops, cfg['merge_radius'])
 
+    def floor_seen(self, mount, pts, cfg):
+        pts = np.asarray(pts, float).reshape(-1, 3)
+        if not len(pts):
+            return np.zeros((0, 2))
+        rot, pos = mount_pose(mount)
+        pb = pts @ rot.T + pos
+        return thin(pb[np.abs(pb[:, 2]) < cfg['obstacle_min_height'], :2], cfg['merge_radius'])
+
 
 SENSOR = Depth()

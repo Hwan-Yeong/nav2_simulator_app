@@ -1,9 +1,11 @@
-// Robot designer: spec form (left), top-view CAD editor (centre), 3D preview + derived values (right).
+// Robot designer: spec form (left), CAD editor with top / side view (centre), 3D preview + derived values (right).
+// Sensors are mounts of library models (sensors.js); their spec forms are generated from the sensor type plugins.
 import { api } from './api.js';
 import { S, emit, on } from './state.js';
-import { h, icon, btn, toast, fmt, debounce, cssVar, DRIVE_LABEL, persist } from './ui.js';
+import { h, icon, btn, toast, fmt, debounce, cssVar, DRIVE_LABEL, persist, menu } from './ui.js';
 import { robotPolygon } from './viewport.js';
 import * as sim from './sim.js';
+import { typeLabel, modelOf, paramFields, libraryMenuItems, sensorLibrary, fovFootprint, fovOf, rayEnd, zoneCentres, rotation, apply } from './sensors.js';
 
 const $ = (id) => document.getElementById(id);
 let R = null;            // profile being edited
@@ -14,8 +16,10 @@ let error = null;
 let preview3d = null;
 let cad = null;
 let inited = false;
+let selSensor = -1;      // index of the sensor highlighted in the form and the editor
 
-const TEMPLATE_SENSOR = { name: 'lidar', type: 'lidar2d', x: 0, y: 0, z: 0.2, yaw_deg: 0, fov_deg: 270, beams: 540, range_min: 0.05, range_max: 12, hz: 15, noise: 0.01 };
+const TEMPLATE_SENSOR = { name: 'scan', type: 'lidar2d', model: 'lidar_360', x: 0, y: 0, z: 0.18, roll_deg: 0, pitch_deg: 0, yaw_deg: 0, fov_deg: 360, beams: 360, range_min: 0.12, range_max: 10, hz: 10, noise: 0.01, dropout: 0, color: '#e5484d', enabled: true };
+const BASE_NAME = { lidar2d: 'lidar', tof: 'tof', ultrasonic: 'sonar', depth: 'depth' };
 
 export async function show() {
   if (!inited) {
@@ -108,15 +112,25 @@ function renderForm() {
   if (R.drive === 'omni') limFields.push(num('최대 횡이동', L, 'vy_max', { unit: 'm/s', step: 0.05 }));
   limFields.push(num('최대 회전', L, 'wz_max', { unit: 'rad/s', step: 0.05 }), num('가속 한계', L, 'ax_max', { unit: 'm/s²', step: 0.05 }), num('회전 가속 한계', L, 'az_max', { unit: 'rad/s²', step: 0.1 }));
   if (R.drive === 'omni') limFields.push(num('횡 가속 한계', L, 'ay_max', { unit: 'm/s²', step: 0.05 }));
-  const sensors = R.sensors.map((s, i) => h('div', { class: 'sensor' },
-    h('header', {}, h('input', { type: 'text', value: s.name, 'aria-label': '센서 이름', style: { width: '120px' },
-      oninput: (e) => { s.name = e.target.value.replace(/[^a-zA-Z0-9_]/g, '_'); changed(); } }),
-    h('span', { class: 'tag', text: s.name === 'scan' ? '/scan' : '/scan_' + s.name }),
-    h('button', { class: 'reset', title: '센서 삭제', 'aria-label': '센서 삭제', html: icon('trash'), disabled: R.sensors.length <= 1, onclick: () => { R.sensors.splice(i, 1); changed(true); } })),
-    h('div', { class: 'grid3' }, num('x', s, 'x', { unit: 'm', step: 0.005 }), num('y', s, 'y', { unit: 'm', step: 0.005 }), num('높이 z', s, 'z', { unit: 'm', step: 0.005 })),
-    h('div', { class: 'grid3' }, num('방향', s, 'yaw_deg', { unit: '°', step: 1 }), num('시야각', s, 'fov_deg', { unit: '°', step: 1, min: 1, max: 360 }), num('빔 수', s, 'beams', { step: 10, int: true })),
-    h('div', { class: 'grid3' }, num('최소 거리', s, 'range_min', { unit: 'm', step: 0.01 }), num('최대 거리', s, 'range_max', { unit: 'm', step: 0.5 }), num('주기', s, 'hz', { unit: 'Hz', step: 1 })),
-    h('div', { class: 'grid3' }, num('거리 잡음 σ', s, 'noise', { unit: 'm', step: 0.005 }))));
+  const sensors = R.sensors.map((sn, i) => sensorCard(sn, i));
+  const lidarList = R.sensors.filter((x) => x.type === 'lidar2d' && x.enabled !== false);
+  const has3d = R.sensors.some((x) => x.type !== 'lidar2d' && x.enabled !== false);
+  R.scan_merge = R.scan_merge || { enabled: false, sources: [], frame: 'base_scan', z: null, angle_increment_deg: 0.9, range_min: 0.05, range_max: 12 };
+  R.perception = R.perception || { mode: 'rules' };
+  const mg = R.scan_merge;
+  const mergeSec = (lidarList.length >= 2 || mg.enabled) ? h('div', { class: 'sec' }, h('h3', { text: '라이다 병합 (/scan)' }),
+    h('label', { class: 'field check' }, h('span', { text: '라이다 여러 개를 /scan 하나로 병합' }),
+      h('input', { type: 'checkbox', checked: !!mg.enabled, onchange: (e) => { mg.enabled = e.target.checked; if (mg.enabled && !mg.sources.length) mg.sources = lidarList.map((x) => x.name); changed(true); } })),
+    mg.enabled ? h('div', { class: 'sec' },
+      h('div', { class: 'checklist inline' }, ...lidarList.map((x) => h('label', {}, h('input', { type: 'checkbox', checked: mg.sources.includes(x.name),
+        onchange: (e) => { mg.sources = e.target.checked ? [...mg.sources, x.name] : mg.sources.filter((n) => n !== x.name); changed(); } }), x.name))),
+      h('div', { class: 'grid3' }, num('병합 높이 z', mg, 'z', { unit: 'm', step: 0.005 }), num('각 해상도', mg, 'angle_increment_deg', { unit: '°', step: 0.1 }), num('최대 거리', mg, 'range_max', { unit: 'm', step: 0.5 })),
+      h('div', { class: 'hint', text: '각 라이다는 /scan_<이름> 으로도 나오고, 병합 결과가 base_scan 프레임의 /scan 으로 나옵니다. Nav2 는 /scan 만 씁니다.' })) : '') : '';
+  const PERC = { rules: ['규칙 기반 인식', 'ToF·Depth·초음파 점을 높이·단차 규칙으로 판단하고 여러 프레임 확인 후 costmap 에 남깁니다 (실제 로봇 인식 방식).'],
+    direct: ['원시 점 바로 사용', '센서 점을 그대로 Nav2 Voxel 레이어에 넣습니다. 단차(바닥보다 낮은 곳)는 못 봅니다.'], off: ['끔', 'ToF·Depth·초음파 데이터는 발행만 하고 Nav2 에는 쓰지 않습니다 (라이다만으로 주행).'] };
+  const percSec = has3d ? h('div', { class: 'sec' }, h('h3', { text: '인식 처리' }),
+    h('div', { class: 'seg' }, ...Object.entries(PERC).map(([k, [lab]]) => h('button', { 'aria-pressed': String(R.perception.mode === k), onclick: () => { R.perception.mode = k; changed(true); } }, lab))),
+    h('div', { class: 'hint', text: PERC[R.perception.mode][1] + (R.perception.mode === 'rules' ? ' 임계값은 시뮬레이션의 파라미터 탭 ‘센서 인식’ 에서 바꿉니다.' : '') })) : '';
   f.replaceChildren(h('div', { class: 'form' },
     h('div', { class: 'sec' }, h('h3', { text: '로봇' }), h('div', { style: { display: 'flex', gap: '6px' } }, list,
       btn('', { cls: 'icon-only', icon: 'plus', title: '새 로봇 (원형 템플릿)', aria: '새 로봇', onclick: () => { R = JSON.parse(JSON.stringify(TEMPLATE)); srcId = null; srcBuiltin = false; changed(true); cad.fit(); } }))),
@@ -127,24 +141,85 @@ function renderForm() {
     h('div', { class: 'sec' }, h('h3', { text: '구동 방식' }), drive,
       h('div', { class: 'hint', text: { diff: '두 바퀴 속도 차로 움직입니다. 제자리 회전 가능.', omni: '메카넘 휠 등으로 옆으로도 움직입니다 (vy).', ackermann: '자동차처럼 앞바퀴를 조향합니다. 제자리 회전 불가. base_link 는 뒷바퀴 축 중심.' }[R.drive] })),
     h('div', { class: 'sec' }, h('h3', { text: 'Footprint (외곽)' }), fpType, fpBody),
-    h('div', { class: 'sec' }, h('h3', { text: '차체·바퀴' }), h('div', { class: 'grid2' }, num('차체 높이', R.body, 'height', { unit: 'm', step: 0.01 }), ...wheelFields)),
+    h('div', { class: 'sec' }, h('h3', { text: '차체·바퀴' }), h('div', { class: 'grid2' }, num('차체 높이', R.body, 'height', { unit: 'm', step: 0.01 }),
+      num('넘을 수 있는 턱', R, 'climb_height', { unit: 'm', step: 0.001 }), ...wheelFields),
+      h('div', { class: 'hint', text: '차체 높이보다 높이 떠 있는 장애물 밑은 지나가고, 턱 높이보다 낮은 장애물·단차는 넘어갑니다.' })),
     h('div', { class: 'sec' }, h('h3', { text: '물리 한계 (시뮬레이터)' }), h('div', { class: 'grid2' }, ...limFields),
       h('div', { class: 'hint', text: 'Nav2 속도 한계와 별개로, 실제 모터가 낼 수 있는 값입니다. Nav2 쪽은 파라미터 탭에서 정합니다.' })),
     h('div', { class: 'sec' }, h('h3', { text: '구동계 응답·오도메트리' }), h('div', { class: 'grid3' },
       num('응답 지연 τ', A, 'tau', { unit: 's', step: 0.01 }), num('직진 슬립 σ', A, 'slip_lin', { step: 0.005 }), num('회전 슬립 σ', A, 'slip_ang', { step: 0.005 }))),
-    h('div', { class: 'sec' }, h('h3', {}, `라이다 (${R.sensors.length})`, btn('추가', { cls: 'sm ghost act', icon: 'plus', onclick: () => {
-      const n = R.sensors.length; R.sensors.push({ ...TEMPLATE_SENSOR, name: `lidar${n}` }); changed(true);
-    } })), ...sensors),
+    h('div', { class: 'sec' }, h('h3', {}, `센서 (${R.sensors.length})`, h('span', { class: 'acts' },
+      btn('라이브러리', { cls: 'sm ghost', icon: 'sliders', title: '센서 모델 만들기·고치기·지우기', onclick: () => sensorLibrary({ onchange: () => {} }) }),
+      btn('센서 추가', { cls: 'sm ghost act', icon: 'plus', onclick: (e) => menu(e.currentTarget, libraryMenuItems(addSensor)) }))),
+      ...sensors),
+    mergeSec, percSec,
     h('div', { class: 'sec', id: 'saveSec' })));
   renderSave();
+}
+
+function uniqueName(base) {
+  const names = new Set(R.sensors.map((x) => x.name));
+  if (!names.has(base)) return base;
+  let k = 2;
+  while (names.has(`${base}${k}`)) k++;
+  return `${base}${k}`;
+}
+
+async function addSensor(model) {
+  try {
+    const m = await api.post('/api/sensors/mount', { model: model.id, name: uniqueName(BASE_NAME[model.type] || model.type) });
+    R.sensors.push(m);
+    selSensor = R.sensors.length - 1;
+    changed(true);
+    toast(`'${model.name}' 을 ${m.name} 으로 달았습니다. 편집기에서 끌어 위치를 정하세요.`);
+  } catch (e) { toast(e.message, 'bad'); }
+}
+
+function mirrored(sn) {
+  const m = JSON.parse(JSON.stringify(sn));
+  m.y = -m.y; m.yaw_deg = -m.yaw_deg; m.roll_deg = -(m.roll_deg || 0);
+  m.name = uniqueName(/left/.test(m.name) ? m.name.replace('left', 'right') : /right/.test(m.name) ? m.name.replace('right', 'left') : m.name + '_m');
+  if (m.zone_mask && m.zones_x) m.zone_mask = m.zone_mask.map((k) => Math.floor(k / m.zones_x) * m.zones_x + (m.zones_x - 1 - (k % m.zones_x))).sort((a, b) => a - b);
+  return m;
+}
+
+function sensorCard(sn, i) {
+  const model = sn.model && modelOf(sn.model);
+  const lidar = sn.type === 'lidar2d';
+  const open = selSensor === i;
+  const pose = [num('x', sn, 'x', { unit: 'm', step: 0.005 }), num('y', sn, 'y', { unit: 'm', step: 0.005 }), num('높이 z', sn, 'z', { unit: 'm', step: 0.005 })];
+  const rot = lidar ? [num('방향 yaw', sn, 'yaw_deg', { unit: '°', step: 1 })] :
+    [num('roll', sn, 'roll_deg', { unit: '°', step: 1 }), num('pitch (+아래)', sn, 'pitch_deg', { unit: '°', step: 1 }), num('yaw', sn, 'yaw_deg', { unit: '°', step: 1 })];
+  const topic = lidar ? (R.scan_merge && R.scan_merge.enabled ? `/scan_${sn.name} → /scan 병합` : (sn.name === 'scan' ? '/scan' : `/scan_${sn.name}`)) : `/sensors/${sn.name}/…`;
+  const more = (e) => menu(e.currentTarget, [
+    { label: '복제', icon: 'copy', onclick: () => { const c = JSON.parse(JSON.stringify(sn)); c.name = uniqueName(sn.name); R.sensors.splice(i + 1, 0, c); selSensor = i + 1; changed(true); } },
+    { label: '좌우 대칭으로 복제', sub: 'y·yaw 반전, 존 마스크도 좌우 반전', icon: 'vertex', onclick: () => { R.sensors.splice(i + 1, 0, mirrored(sn)); selSensor = i + 1; changed(true); } },
+    ...(model ? [{ label: '라이브러리 값으로 되돌리기', sub: model.name, icon: 'undo', onclick: () => { for (const [k, v] of Object.entries(model)) if (!['id', 'builtin', 'name', 'description', 'mount_hint', 'type'].includes(k)) sn[k] = JSON.parse(JSON.stringify(v)); changed(true); } }] : []),
+    'sep',
+    { label: '삭제', icon: 'trash', onclick: () => { R.sensors.splice(i, 1); selSensor = -1; changed(true); } },
+  ]);
+  return h('div', { class: 'sensor' + (open ? ' sel' : '') + (sn.enabled === false ? ' off' : ''), onpointerdown: () => { if (selSensor !== i) { selSensor = i; cad.draw(); } } },
+    h('header', {},
+      h('i', { class: 'swatch', style: { background: sn.color || '#888' } }),
+      h('input', { type: 'text', value: sn.name, 'aria-label': '센서 이름', style: { width: '110px' }, oninput: (e) => { sn.name = e.target.value.replace(/[^a-zA-Z0-9_]/g, '_'); changed(); } }),
+      h('span', { class: 'tag', title: model ? `라이브러리: ${model.name}` : '', text: model ? model.name : typeLabel(sn.type) }),
+      h('span', { class: 'grow' }),
+      h('label', { class: 'mini', title: '켜기/끄기' }, h('input', { type: 'checkbox', checked: sn.enabled !== false, onchange: (e) => { sn.enabled = e.target.checked; changed(true); } })),
+      h('button', { class: 'reset', title: '더 보기', 'aria-label': `${sn.name} 메뉴`, html: icon('more'), onclick: more })),
+    h('div', { class: 'grid3' }, ...pose),
+    h('div', { class: 'grid3' }, ...rot),
+    h('details', { class: 'specs', open: open && !lidar ? true : null }, h('summary', {}, '센서 사양', h('small', { class: 'faint', text: '  ' + topic })),
+      ...paramFields(sn, () => changed(), {})));
 }
 
 const TEMPLATE = {
   name: '새 로봇', description: '', drive: 'diff', footprint: { type: 'circle', radius: 0.2, points: [] }, footprint_padding: 0.02,
   body: { height: 0.15, color: '#4a6572' }, wheels: { track: 0.3, radius: 0.05, wheelbase: 0, max_steer_deg: 0 },
   limits: { vx_max: 0.6, vx_min: -0.2, vy_max: 0, wz_max: 1.5, ax_max: 1.0, ay_max: 1.0, az_max: 3.0 },
-  actuator: { tau: 0.08, slip_lin: 0.02, slip_ang: 0.03 },
-  sensors: [{ ...TEMPLATE_SENSOR, name: 'scan', fov_deg: 360, beams: 360, range_min: 0.12, range_max: 10, hz: 10, z: 0.18 }],
+  actuator: { tau: 0.08, slip_lin: 0.02, slip_ang: 0.03 }, climb_height: 0.012,
+  sensors: [{ ...TEMPLATE_SENSOR }],
+  scan_merge: { enabled: false, sources: [], frame: 'base_scan', z: null, angle_increment_deg: 0.9, range_min: 0.05, range_max: 12 },
+  perception: { mode: 'rules' },
 };
 
 function renderSave() {
@@ -173,6 +248,20 @@ function renderSave() {
       } }) : ''));
 }
 
+// where downward-looking sensors first see the floor (helps choosing pitch for drop / low obstacle detection)
+function floorReach() {
+  const out = [];
+  for (const sn of R.sensors) {
+    if (sn.enabled === false || sn.type === 'lidar2d') continue;
+    const [, v2] = fovOf(sn);
+    const near = rayEnd(sn, 0, -Math.tan(v2), sn.range_max), far = rayEnd(sn, 0, Math.tan(v2), sn.range_max);
+    const dist = (r) => Math.hypot(r.p[0] - sn.x, r.p[1] - sn.y);
+    if (near.floor) out.push([`${sn.name} 바닥`, far.floor ? `${fmt.n(dist(near), 2)}~${fmt.n(dist(far), 2)} m 앞` : `${fmt.n(dist(near), 2)} m 부터 (위쪽은 바닥 안 봄)`]);
+    else out.push([`${sn.name} 바닥`, '안 봄 (수평 이상)']);
+  }
+  return out;
+}
+
 function renderDerived() {
   const d = $('derived');
   if (!d) return;
@@ -180,7 +269,9 @@ function renderDerived() {
     ['내접원 반지름', `${fmt.n(derived.inscribed, 3)} m`], ['외접원 반지름', `${fmt.n(derived.circumscribed, 3)} m`],
     ['Nav2 footprint', R.footprint.type === 'circle' ? `robot_radius ${fmt.n(R.footprint.radius + R.footprint_padding, 3)}` : `다각형 ${R.footprint.points.length}점 + padding ${R.footprint_padding}`],
     ['최소 회전 반경', R.drive === 'ackermann' ? `${fmt.n(derived.min_turning_radius, 2)} m` : '0 (제자리 회전)'],
-    ['라이다', R.sensors.map((s) => `${s.name} ${s.fov_deg}°`).join(', ')],
+    ['센서', Object.entries(R.sensors.filter((x) => x.enabled !== false).reduce((c, x) => ({ ...c, [x.type]: (c[x.type] || 0) + 1 }), {}))
+      .map(([t, n]) => `${typeLabel(t)} ${n}`).join(' · ')],
+    ...floorReach(),
     ['통과 가능 최소 폭', `약 ${fmt.n(2 * (derived.inscribed + (R.footprint_padding || 0)), 2)} m`],
   ] : [];
   d.replaceChildren(
@@ -194,9 +285,14 @@ function initCadTools() {
   const t = $('cadTools');
   const mk = (key, label, ic) => h('button', { 'aria-pressed': String(cad[key]), onclick: (e) => { cad[key] = !cad[key]; e.currentTarget.setAttribute('aria-pressed', String(cad[key])); cad.draw(); persist('cad.' + key, cad[key]); } },
     h('span', { html: icon(ic) }), label);
-  t.replaceChildren(mk('snap', '5 mm 스냅', 'fit'), mk('mirror', '좌우 대칭 편집', 'vertex'), mk('dims', '치수', 'sliders'),
+  const view = h('div', { class: 'seg' }, ...[['top', '위에서'], ['side', '옆에서']].map(([k, lab]) => h('button', { 'aria-pressed': String(cad.view === k),
+    onclick: (e) => { cad.view = k; persist('cad.view', k); for (const b of e.currentTarget.parentElement.children) b.setAttribute('aria-pressed', String(b === e.currentTarget)); cad.fit(); hint(); } }, lab)));
+  t.replaceChildren(view, mk('snap', '5 mm 스냅', 'fit'), mk('mirror', '좌우 대칭 편집', 'vertex'), mk('dims', '치수', 'sliders'),
     h('button', { onclick: () => { cad.fit(); } }, h('span', { html: icon('fit') }), '맞춤'));
-  $('cadHint').textContent = '꼭짓점·센서를 끌어 옮기기 · 변 더블클릭: 꼭짓점 추가 · 꼭짓점 우클릭: 삭제 · 센서 방향 핸들 끌기 · 휠: 확대';
+  const hint = () => { $('cadHint').textContent = cad.view === 'side'
+    ? '옆에서 본 모습 (x–z) · 센서를 끌어 앞뒤·높이 조절 · 끝의 원을 끌어 pitch (아래로 +) · 점선: 바닥에 닿는 광선'
+    : '꼭짓점·센서를 끌어 옮기기 · 변 더블클릭: 꼭짓점 추가 · 꼭짓점 우클릭: 삭제 · 센서 방향 핸들 끌기 · 휠: 확대'; };
+  hint();
 }
 
 class Cad {
@@ -204,6 +300,7 @@ class Cad {
     this.c = canvas; this.g = canvas.getContext('2d');
     this.s = 600; this.cx = 0.1; this.cy = 0;
     this.snap = persist('cad.snap') ?? true; this.mirror = persist('cad.mirror') ?? true; this.dims = persist('cad.dims') ?? true;
+    this.view = persist('cad.view') || 'top';
     this.robot = null; this.drag = null; this.hover = null;
     this.colors();
     new ResizeObserver(() => this.resize()).observe(canvas.parentElement);
@@ -228,6 +325,15 @@ class Cad {
   }
   fit() {
     if (!this.robot) return;
+    if (this.view === 'side') {
+      const xs = robotPolygon(this.robot).map((p) => p[0]).concat(this.robot.sensors.map((sn) => sn.x));
+      const top = Math.max(this.robot.body.height || 0.1, ...this.robot.sensors.map((sn) => sn.z));
+      const x0 = Math.min(...xs) - 0.25, x1 = Math.max(...xs) + 0.9;
+      this.cx = (x0 + x1) / 2; this.cy = top / 2;
+      this.s = Math.max(80, Math.min(3000, Math.min(this.W / (x1 - x0), this.H / (top + 0.4)) * 0.85));
+      this.draw();
+      return;
+    }
     const pts = robotPolygon(this.robot).concat(this.robot.sensors.map((s) => [s.x, s.y]));
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
     const w = Math.max(...xs) - Math.min(...xs) + 0.6, hh = Math.max(...ys) - Math.min(...ys) + 0.6;
@@ -253,8 +359,10 @@ class Cad {
       for (let y = Math.ceil(y0 / st) * st; y <= y1; y += st) { const [, sy] = this.S(0, y); g.moveTo(0, Math.round(sy) + 0.5); g.lineTo(this.W, Math.round(sy) + 0.5); }
       g.stroke(); g.globalAlpha = 1;
     }
-    // axes
+    // axes (top view; the side view draws the floor instead)
     const [ox, oy] = this.S(0, 0);
+    this.labels = [];
+    if (R0 && this.view === 'side') { this.drawSide(); return; }
     g.lineWidth = 1.5; g.strokeStyle = this.k.scan; g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox + 60, oy); g.stroke();
     g.strokeStyle = this.k.good; g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox, oy - 60); g.stroke();
     g.fillStyle = this.k.muted; g.font = '11px ui-monospace, monospace';
@@ -295,26 +403,101 @@ class Cad {
     if (R0.footprint.type === 'polygon') {
       R0.footprint.points.forEach((p, i) => this.handle(p[0], p[1], this.hover && this.hover.kind === 'v' && this.hover.i === i));
     } else this.handle(R0.footprint.radius, 0, this.hover && this.hover.kind === 'r');
-    // sensors
-    for (const [i, s] of R0.sensors.entries()) {
-      const [sx, sy] = this.S(s.x, s.y), yaw = s.yaw_deg * Math.PI / 180, fov = Math.min(s.fov_deg, 360) * Math.PI / 180;
-      const rr = this.fanR(s);
-      g.fillStyle = this.k.scan; g.globalAlpha = 0.12; g.beginPath(); g.moveTo(sx, sy);
-      g.arc(sx, sy, rr, -(yaw + fov / 2), -(yaw - fov / 2)); g.closePath(); g.fill(); g.globalAlpha = 1;
-      g.strokeStyle = this.k.scan; g.lineWidth = 1; g.stroke();
-      const [hx, hy] = [sx + Math.cos(yaw) * rr, sy - Math.sin(yaw) * rr];
-      g.beginPath(); g.moveTo(sx, sy); g.lineTo(hx, hy); g.stroke();
-      g.fillStyle = this.k.panel; g.strokeStyle = this.k.scan; g.lineWidth = 2;
-      g.beginPath(); g.arc(hx, hy, 5, 0, Math.PI * 2); g.fill(); g.stroke();
-      g.fillStyle = (this.hover && this.hover.kind === 's' && this.hover.i === i) ? this.k.accent : this.k.ink;
+    // sensors: lidar fans, and for 3D sensors the field of view where it meets the floor
+    for (const [i, sn] of R0.sensors.entries()) {
+      const on = sn.enabled !== false, sel = i === selSensor;
+      const col = sn.color || this.k.scan;
+      const [sx, sy] = this.S(sn.x, sn.y), yaw = sn.yaw_deg * Math.PI / 180, rr = this.fanR(sn);
+      g.globalAlpha = on ? 1 : 0.35;
+      if (sn.type === 'lidar2d') {
+        const fov = Math.min(sn.fov_deg, 360) * Math.PI / 180;
+        g.fillStyle = col; g.globalAlpha *= sel ? 0.22 : 0.12; g.beginPath(); g.moveTo(sx, sy);
+        g.arc(sx, sy, rr, -(yaw + fov / 2), -(yaw - fov / 2)); g.closePath(); g.fill(); g.globalAlpha = on ? 1 : 0.35;
+        g.strokeStyle = col; g.lineWidth = sel ? 2 : 1; g.stroke();
+      } else {
+        const L = Math.min(sn.range_max, 1.0);
+        const fp = fovFootprint(sn, L);
+        g.fillStyle = col; g.globalAlpha *= sel ? 0.2 : 0.1; g.beginPath();
+        fp.forEach((r, k) => { const [x, y] = this.S(r.p[0], r.p[1]); k ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); g.fill();
+        g.globalAlpha = on ? 1 : 0.35; g.strokeStyle = col; g.lineWidth = sel ? 2 : 1; g.setLineDash([4, 3]); g.stroke(); g.setLineDash([]);
+        if (sn.type === 'tof' && sn.zones_x * sn.zones_y > 1) {      // where each zone looks
+          for (const z of zoneCentres(sn)) {
+            const r = rayEnd(sn, z.ty, z.tz, L), [x, y] = this.S(r.p[0], r.p[1]);
+            g.beginPath(); g.arc(x, y, 3, 0, Math.PI * 2);
+            if (z.on) { g.fillStyle = col; g.fill(); } else { g.strokeStyle = col; g.lineWidth = 1; g.stroke(); }
+          }
+        }
+      }
+      const [hx, hy] = [sx + Math.cos(yaw) * rr * (sn.type === 'lidar2d' ? 1 : 0.6), sy - Math.sin(yaw) * rr * (sn.type === 'lidar2d' ? 1 : 0.6)];
+      g.strokeStyle = col; g.lineWidth = 1; g.beginPath(); g.moveTo(sx, sy); g.lineTo(hx, hy); g.stroke();
+      g.fillStyle = this.k.panel; g.lineWidth = 2; g.beginPath(); g.arc(hx, hy, 5, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.fillStyle = (this.hover && this.hover.kind === 's' && this.hover.i === i) || sel ? this.k.accent : this.k.ink;
       g.beginPath(); g.arc(sx, sy, 6, 0, Math.PI * 2); g.fill();
-      g.fillStyle = this.k.ink; g.font = '600 11px var(--f-ui), sans-serif'; g.fillText(s.name, sx + 9, sy - 8);
+      this.label(sn.name, sx + 9, sy - 8);
+      g.globalAlpha = 1;
     }
     if (this.dims) this.dimensions(poly);
   }
   fanR(s) {
     const circ = Math.max(...robotPolygon(this.robot, 32).map(([x, y]) => Math.hypot(x, y)), 0.1);
     return Math.min(s.range_max, Math.max(0.1, circ * 0.45)) * this.s;
+  }
+  // side view: x forward to the right, z up; floor, body, each sensor's vertical field of view and where it meets the floor
+  sideS(x, z) { return [(x - this.cx) * this.s + this.W / 2, this.H / 2 - (z - this.cy) * this.s]; }
+  // sensor name next to a point, moved down a line while it would overlap one already drawn
+  label(text, x, y, color = null) {
+    const g = this.g;
+    g.font = color ? '11px ui-monospace, monospace' : '600 11px var(--f-ui), sans-serif';
+    const w = g.measureText(text).width;
+    let ty = y;
+    for (let k = 0; k < 12 && this.labels.some((r) => x < r[0] + r[2] && x + w > r[0] && Math.abs(ty - r[1]) < 13); k++) ty += 13;
+    this.labels.push([x, ty, w]);
+    g.fillStyle = color || this.k.ink; g.fillText(text, x, ty);
+  }
+  drawSide() {
+    const g = this.g, R0 = this.robot;
+    const xs = robotPolygon(R0, 32).map((p) => p[0]);
+    const [fx0, fy] = this.sideS(-100, 0), [fx1] = this.sideS(100, 0);
+    g.strokeStyle = this.k.ink; g.lineWidth = 2; g.beginPath(); g.moveTo(fx0, fy); g.lineTo(fx1, fy); g.stroke();
+    g.fillStyle = this.k.faint; g.font = '11px ui-monospace, monospace'; g.fillText('바닥 z = 0', 8, fy - 6);
+    const [bx0, by1] = this.sideS(Math.min(...xs), R0.body.height), [bx1, by0] = this.sideS(Math.max(...xs), 0);
+    g.fillStyle = R0.body.color; g.globalAlpha = 0.45; g.fillRect(bx0, by1, bx1 - bx0, by0 - by1); g.globalAlpha = 1;
+    g.strokeStyle = this.k.ink; g.lineWidth = 1.5; g.strokeRect(bx0, by1, bx1 - bx0, by0 - by1);
+    const wr = R0.wheels.radius || 0.05, [wx, wy] = this.sideS(0, wr);
+    g.fillStyle = this.k.ink; g.beginPath(); g.arc(wx, wy, wr * this.s, 0, Math.PI * 2); g.fill();
+    if (R0.climb_height > 0) { const [, cy] = this.sideS(0, R0.climb_height); g.strokeStyle = this.k.good; g.setLineDash([3, 3]); g.beginPath(); g.moveTo(bx1, cy); g.lineTo(bx1 + 60, cy); g.stroke(); g.setLineDash([]); g.fillStyle = this.k.good; g.fillText(`턱 ${(R0.climb_height * 100).toFixed(1)} cm`, bx1 + 64, cy + 4); }
+    for (const [i, sn] of R0.sensors.entries()) {
+      const on = sn.enabled !== false, sel = i === selSensor, col = sn.color || this.k.scan;
+      g.globalAlpha = on ? 1 : 0.35;
+      const [sx, sy] = this.sideS(sn.x, sn.z);
+      const L = Math.min(sn.range_max, 2.0);
+      if (sn.type === 'lidar2d') {
+        const [ex] = this.sideS(sn.x + L, sn.z), [bx] = this.sideS(sn.x - L, sn.z);
+        g.strokeStyle = col; g.lineWidth = sel ? 2.5 : 1.5; g.beginPath(); g.moveTo(bx, sy); g.lineTo(ex, sy); g.stroke();
+      } else {
+        const [, v2] = fovOf(sn);
+        const rays = [-v2, 0, v2].map((a) => rayEnd({ ...sn, yaw_deg: 0, roll_deg: 0 }, 0, Math.tan(a), L));
+        g.fillStyle = col; g.globalAlpha *= sel ? 0.2 : 0.1; g.beginPath(); g.moveTo(sx, sy);
+        for (const r of [rays[0], rays[2]]) { const [x, y] = this.sideS(r.p[0], r.p[2]); g.lineTo(x, y); }
+        g.closePath(); g.fill(); g.globalAlpha = on ? 1 : 0.35;
+        g.strokeStyle = col; g.lineWidth = 1;
+        for (const r of rays) { const [x, y] = this.sideS(r.p[0], r.p[2]); g.setLineDash(r.floor ? [4, 3] : []); g.beginPath(); g.moveTo(sx, sy); g.lineTo(x, y); g.stroke(); }
+        g.setLineDash([]);
+        if (sn.type === 'tof' && sn.zones_y > 1) {
+          const rowsOn = new Set(zoneCentres(sn).filter((z) => z.on).map((z) => z.i));
+          for (const z of zoneCentres(sn).filter((q) => q.j === Math.floor(sn.zones_x / 2))) {
+            const r = rayEnd({ ...sn, yaw_deg: 0, roll_deg: 0 }, 0, z.tz, L), [x, y] = this.sideS(r.p[0], r.p[2]);
+            g.beginPath(); g.arc(x, y, 3, 0, Math.PI * 2); if (rowsOn.has(z.i)) { g.fillStyle = col; g.fill(); } else { g.stroke(); }
+          }
+        }
+        const c = rays[1], [hx, hy] = this.sideS(sn.x + (c.p[0] - sn.x) * 0.35, sn.z + (c.p[2] - sn.z) * 0.35);
+        g.fillStyle = this.k.panel; g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(hx, hy, 5, 0, Math.PI * 2); g.fill(); g.stroke();
+        if (rays[0].floor) { const [x, y] = this.sideS(rays[0].p[0], 0); this.label(`${(Math.hypot(rays[0].p[0] - sn.x, rays[0].p[1] - sn.y)).toFixed(2)} m`, x - 14, y + 14, col); }
+      }
+      g.fillStyle = sel ? this.k.accent : this.k.ink; g.beginPath(); g.arc(sx, sy, 5, 0, Math.PI * 2); g.fill();
+      this.label(`${sn.name}  z ${sn.z.toFixed(3)}`, sx + 8, sy - 8);
+      g.globalAlpha = 1;
+    }
   }
   handle(x, y, hot) {
     const g = this.g, [sx, sy] = this.S(x, y);
@@ -338,8 +521,20 @@ class Cad {
   }
   pick(sx, sy) {
     const R0 = this.robot;
+    if (this.view === 'side') {
+      for (const [i, sn] of R0.sensors.entries()) {
+        const [px, py] = this.sideS(sn.x, sn.z);
+        if (sn.type !== 'lidar2d') {
+          const c = rayEnd({ ...sn, yaw_deg: 0, roll_deg: 0 }, 0, 0, Math.min(sn.range_max, 2.0));
+          const [hx, hy] = this.sideS(sn.x + (c.p[0] - sn.x) * 0.35, sn.z + (c.p[2] - sn.z) * 0.35);
+          if (Math.hypot(sx - hx, sy - hy) < 8) return { kind: 'pitch', i };
+        }
+        if (Math.hypot(sx - px, sy - py) < 8) return { kind: 'sz', i };
+      }
+      return null;
+    }
     for (const [i, s] of R0.sensors.entries()) {
-      const [px, py] = this.S(s.x, s.y), yaw = s.yaw_deg * Math.PI / 180, rr = this.fanR(s);
+      const [px, py] = this.S(s.x, s.y), yaw = s.yaw_deg * Math.PI / 180, rr = this.fanR(s) * (s.type === 'lidar2d' ? 1 : 0.6);
       if (Math.hypot(sx - (px + Math.cos(yaw) * rr), sy - (py - Math.sin(yaw) * rr)) < 8) return { kind: 'yaw', i };
       if (Math.hypot(sx - px, sy - py) < 8) return { kind: 's', i };
     }
@@ -356,7 +551,11 @@ class Cad {
     const [sx, sy] = this.pos(e);
     const hit = this.pick(sx, sy);
     this.c.setPointerCapture(e.pointerId);
-    if (hit) { this.drag = hit; if (hit.kind === 'v' && this.mirror) this.drag.mate = this.mate(hit.i); }
+    if (hit) {
+      this.drag = hit;
+      if (hit.kind === 'v' && this.mirror) this.drag.mate = this.mate(hit.i);
+      if (hit.i !== undefined && ['s', 'yaw', 'sz', 'pitch'].includes(hit.kind)) selSensor = hit.i;
+    }
     else this.drag = { kind: 'pan', sx, sy, cx: this.cx, cy: this.cy };
   }
   mate(i) {
@@ -377,6 +576,12 @@ class Cad {
     const [wx, wy] = this.Wd(sx, sy);
     const R0 = this.robot;
     if (d.kind === 'pan') { this.cx = d.cx - (sx - d.sx) / this.s; this.cy = d.cy + (sy - d.sy) / this.s; this.draw(); return; }
+    if (d.kind === 'sz') { const sn = R0.sensors[d.i]; sn.x = this.q(wx); sn.z = Math.max(0, this.q(wy)); changed(); return; }
+    if (d.kind === 'pitch') {
+      const sn = R0.sensors[d.i]; let a = -Math.atan2(wy - sn.z, wx - sn.x) * 180 / Math.PI;
+      if (this.snap) a = Math.round(a);
+      sn.pitch_deg = Math.max(-90, Math.min(90, a)); changed(); return;
+    }
     if (d.kind === 'v') {
       const p = R0.footprint.points[d.i]; p[0] = this.q(wx); p[1] = this.q(wy);
       if (d.mate >= 0) { const m = R0.footprint.points[d.mate]; m[0] = p[0]; m[1] = -p[1]; }

@@ -96,7 +96,7 @@ class Depth(SensorType):
         band = (pb[:, 2] >= cfg['obstacle_min_height']) & (pb[:, 2] <= cfg['obstacle_max_height'])
         obs = pb[band, :2]
         if len(obs) and cfg['min_neighbors'] > 0:
-            cnt = np.array([len(x) for x in cKDTree(obs).query_ball_point(obs, cfg['neighbor_radius'])]) - 1
+            cnt = np.asarray(cKDTree(obs).query_ball_point(obs, cfg['neighbor_radius'], return_length=True)) - 1
             obs = obs[cnt >= cfg['min_neighbors']]
         low = pb[pb[:, 2] <= -cfg['drop_min_depth']]
         drops = pos[None, :2] + (low[:, :2] - pos[None, :2]) * (pos[2] / (pos[2] - low[:, 2]))[:, None] if len(low) else np.zeros((0, 2))

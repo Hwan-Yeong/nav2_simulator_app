@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Capture the user-guide screenshots (docs/guide/img, element boxes in boxes.json for the numbered callouts) and the
-README images (docs/img), from a running server on :8765.
+README images (docs/img), from a running server (NAVSTUDIO_URL, default http://localhost:8765).
 
-python3 scripts/capture_guide.py all | prepare | sim tools panels compare maps robot sensors sensorsim bench tune | readme
+python3 scripts/capture_guide.py all | prepare | sim tools panels compare maps robot sensors coverage sensorsim bench tune | readme
 
 Run it against a clean NAVSTUDIO_HOME so old runs or private maps do not show up, e.g.
   NAVSTUDIO_HOME=/tmp/ns-capture NAVSTUDIO_OVERLAY=~/.navstudio/overlay/install/setup.bash navstudio run --no-browser
@@ -19,7 +19,7 @@ import urllib.request
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
-B = 'http://localhost:8765'
+B = os.environ.get('NAVSTUDIO_URL', 'http://localhost:8765')
 ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 OUT = os.path.join(ROOT, 'docs', 'guide', 'img')
 README_IMG = os.path.join(ROOT, 'docs', 'img')
@@ -279,6 +279,25 @@ def shot_sensors(p):
     br.close()
 
 
+def shot_coverage(p):
+    br, pg = page(p, B + '/#robot')
+    pg.select_option('#robotForm select', 'everybot_home')
+    pg.wait_for_timeout(2000)
+    pg.click('#cadTools button:has-text("감지 범위")')
+    pg.wait_for_selector('.covpanel[data-state="done"]', timeout=120000)
+    pg.wait_for_timeout(800)
+    shot(pg, 'robot_coverage.png')
+    save_boxes('robot_coverage', pg, {'btn': '#cadTools button:has-text("감지 범위")', 'probe': '.covpanel .seg', 'summary': '.covdyn .kv',
+                                      'corr': '.covcorr', 'legend': '.covlegend', 'hint': '#cadHint', 'cad': '#cadStage'})
+    pg.select_option('#robotForm select', 'everybot')                 # a lidar-only robot: the same probe
+    pg.wait_for_timeout(1500)
+    pg.wait_for_selector('.covpanel[data-state="done"]', timeout=120000)
+    pg.click('#cadTools button:has-text("맞춤")')
+    pg.wait_for_timeout(600)
+    shot(pg, 'coverage_lidar.png', clip=around(pg, '#cadStage', 0))
+    br.close()
+
+
 def shot_sensorsim(p):
     meta = api('GET', '/api/maps/synth_warehouse')
     x0, y0, _ = meta['start']
@@ -342,7 +361,7 @@ def shot_tune(p):
 def readme():
     """README images: the same screens at 1x."""
     os.makedirs(README_IMG, exist_ok=True)
-    for src, dst in (('sim_overview.png', 'sim.png'), ('sim_compare.png', 'compare.png'), ('robot_sensors.png', 'robot_designer.png'), ('sim_sensors.png', 'sensors.png'),
+    for src, dst in (('sim_overview.png', 'sim.png'), ('sim_compare.png', 'compare.png'), ('robot_coverage.png', 'robot_designer.png'), ('sim_sensors.png', 'sensors.png'),
                      ('bench_result.png', 'benchmark.png'), ('tune_result.png', 'tuning.png')):
         im = Image.open(os.path.join(OUT, src))
         im = im.resize((im.width // 2, im.height // 2), Image.LANCZOS)
@@ -352,7 +371,7 @@ def readme():
     print('readme images ->', README_IMG)
 
 
-ORDER = ['sim', 'tools', 'panels', 'compare', 'maps', 'robot', 'sensors', 'sensorsim', 'bench', 'tune']
+ORDER = ['sim', 'tools', 'panels', 'compare', 'maps', 'robot', 'sensors', 'coverage', 'sensorsim', 'bench', 'tune']
 
 if __name__ == '__main__':
     what = sys.argv[1:] or ['all']

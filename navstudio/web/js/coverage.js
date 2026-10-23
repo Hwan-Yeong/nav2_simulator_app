@@ -81,14 +81,15 @@ export class Coverage {
 
   renderDyn() {
     const d = this.data;
-    const status = this.busy ? '계산 중…' : this.error ? '' : this.stale ? '바뀐 설계로 다시 계산합니다' : d ? `${(d.ms / 1000).toFixed(1)} s` : '';
+    const status = this.busy ? '계산 중…' : this.error ? '' : this.stale ? '바뀐 설계로 다시 계산합니다' : d ? (d.ms < 1000 ? `${d.ms} ms` : `${(d.ms / 1000).toFixed(1)} s`) : '';
+    this.panel.dataset.state = this.busy || this.stale ? 'busy' : this.error ? 'error' : d ? 'done' : 'idle';
     const out = [h('div', { class: 'faint covstatus', text: status })];
     if (this.error) out.push(h('div', { class: 'errbox', text: this.error }));
     if (d) {
       const S = d.summary, C = S.corridor;
       const pct = (x) => `${Math.round(100 * x)}%`;
       const bar = h('div', { class: 'covbar' }, ...['ok', 'late', 'blind'].map((k) => h('i', { style: { width: pct(C[k]), background: `var(${STATE_COL[k]})` } })));
-      const first = C.centre && C.centre.first !== null ? `${C.centre.first.toFixed(2)} m 앞에서 처음 감지` : '정면에서 감지 못 함';
+      const first = C.centre && C.centre.first !== null ? `${C.centre.first.toFixed(2)} m 앞에서 처음 감지` : '감지 못 함';
       const ring = ['front', 'left', 'right', 'back'].map((k) => `${{ front: '앞', left: '좌', right: '우', back: '뒤' }[k]} ${S.ring[k] === null ? '–' : pct(S.ring[k])}`).join(' · ');
       out.push(
         h('dl', { class: 'kv' },

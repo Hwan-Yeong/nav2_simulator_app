@@ -26,6 +26,7 @@ PYTHONPATH=$PWD python3 -m navstudio run --no-browser   # 소스에서 실행, h
 | `navstudio/sim/sim2d.py` | 시뮬레이터 (2.5D 월드, 라이다·3D 센서, 보행자) |
 | `navstudio/sim/raycast.py` · `perception.py` | 3D 광선 계산, 낮은 장애물·단차 인식 노드 |
 | `navstudio/sensortypes/` · `sensors.py` | 센서 종류 플러그인, 센서 모델 라이브러리 ([SENSORS.md](SENSORS.md)) |
+| `navstudio/coverage.py` · `web/js/coverage.js` | 감지 범위(사각지대) 계산과 로봇 설계 화면 표시 |
 | `navstudio/bench/` | 시나리오, 벤치마크 워커, 병렬 실행, 통계, 튜닝 |
 | `navstudio/web/` | UI. 빌드 도구 없는 ES 모듈 (`js/state.js` 상태, `sim.js` 시뮬레이션 화면, `robot.js` 로봇 설계, `sensors.js` 센서 폼·라이브러리, `main.js` 상단·연결) |
 | `scripts/` | `check.py` 검사, `release.py` 릴리스, `capture_guide.py` · `capture_demo.py` 스크린샷·데모 |

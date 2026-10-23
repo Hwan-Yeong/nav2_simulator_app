@@ -9,6 +9,17 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-23
+
+### 추가
+- **감지 범위 (사각지대 지도)**: 로봇 설계 편집기의 **감지 범위** 를 켜면, 물체(낮은 턱 · 문턱 · 공중 · 의자 다리 · 박스 · 단차, 크기·높이 조절)를 로봇 주변 칸마다 놓았을 때 어느 센서가 감지하는지 칸 색으로 보여 줍니다. 센서 종류의 광선·측정·인식 규칙을 그대로 써서 계산하므로 직접 만든 센서 종류에도 적용됩니다.
+  - 요약: 정지 거리, 앞 통로에서 제때 / 늦게 / 못 보는 비율, 정면에서 처음 감지하는 거리, 로봇 주변 0.5 m 의 방향별 감지 비율(사각은 빨간 빗금)
+  - 칸에 마우스를 올리면 감지하는 센서 이름, 범례에서 센서 하나만 보기, 센서를 옮기면 다시 계산
+  - REST `POST /api/robots/coverage`, `GET /api/coverage/probes`
+
+### 변경
+- Depth 인식 규칙의 이웃 점 세기를 목록 없이 셉니다 (결과는 같고, 점이 많을 때 2~4배 빠름).
+
 ## [0.3.0] - 2026-10-23
 
 ### 추가
@@ -75,7 +86,8 @@ nav_tuning 분석 저장소에서 앱만 분리한 첫 버전입니다.
 - 공개 저장소에는 합성 맵 4종만 기본으로 넣습니다. 현장 맵은 맵 올리기로 추가합니다.
 - Docker 는 기본으로 이 PC 에서만 접속됩니다 (`127.0.0.1:8765`).
 
-[Unreleased]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/Hwan-Yeong/nav2_simulator_app/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Hwan-Yeong/nav2_simulator_app/releases/tag/v0.1.0

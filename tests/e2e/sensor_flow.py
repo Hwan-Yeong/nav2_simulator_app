@@ -68,10 +68,10 @@ def main():
         print('ok  side view')
         # ---------------------------------------------------------------- detection coverage
         pg.click('#cadTools button:has-text("감지 범위")')
-        pg.wait_for_selector('.covstatus:has-text(" s")', timeout=60000)
+        pg.wait_for_selector('.covpanel[data-state="done"]', timeout=60000)
         pg.click('.covpanel .seg button:has-text("단차")')
         pg.wait_for_timeout(300)
-        pg.wait_for_selector('.covstatus:has-text(" s")', timeout=60000)
+        pg.wait_for_selector('.covpanel[data-state="done"]', timeout=60000)
         dyn = pg.inner_text('.covdyn')
         assert '제때 100%' in dyn and 'depth' in dyn, dyn
         pg.click('.covpanel button[aria-label="감지 범위 닫기"]')

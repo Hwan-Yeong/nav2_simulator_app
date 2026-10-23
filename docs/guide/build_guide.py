@@ -25,15 +25,16 @@ DATE = _rel.group(1) if _rel else datetime.date.today().isoformat() + ' (미출�
 
 
 def shot(name, callouts=(), caption='', cls='shot'):
-    """Screenshot with numbered callouts. callouts: (box_key, number, anchor, outline?)"""
+    """Screenshot with numbered callouts. callouts: (box_key, number, anchor, outline?)
+    anchor: vertical t / m / b (T / B: just above / below the box), horizontal l / c / r (L / R: just outside)"""
     boxes = BOXES.get(name.replace('.png', ''), {})
     marks = []
     for key, num, anchor, *rest in callouts:
         b = boxes.get(key)
         if not b:
             continue
-        x = {'l': b['x'], 'c': b['x'] + b['width'] / 2, 'r': b['x'] + b['width']}[anchor[1]]
-        y = {'t': b['y'], 'm': b['y'] + b['height'] / 2, 'b': b['y'] + b['height']}[anchor[0]]
+        x = {'l': b['x'], 'c': b['x'] + b['width'] / 2, 'r': b['x'] + b['width'], 'L': b['x'] - 0.022, 'R': b['x'] + b['width'] + 0.022}[anchor[1]]
+        y = {'t': b['y'], 'm': b['y'] + b['height'] / 2, 'b': b['y'] + b['height'], 'T': b['y'] - 0.03, 'B': b['y'] + b['height'] + 0.03}[anchor[0]]
         if rest and rest[0]:
             marks.append(f'<span class="ring" style="left:{100 * b["x"]:.2f}%;top:{100 * b["y"]:.2f}%;'
                          f'width:{100 * b["width"]:.2f}%;height:{100 * b["height"]:.2f}%"></span>')
@@ -67,7 +68,7 @@ PAGES.append(f'''
   <div class="cover-grid">
     <div><b>시뮬레이션</b><span>맵·장애물·보행자를 놓고 실시간 주행</span></div>
     <div><b>동시 실행 비교</b><span>설정 2~4개를 나란히, 같은 순간에 출발</span></div>
-    <div><b>로봇 · 센서 설계</b><span>외곽·라이다·ToF·Depth 를 끌어서 배치</span></div>
+    <div><b>로봇 · 센서 설계</b><span>센서를 끌어서 배치하고 사각지대 확인</span></div>
     <div><b>벤치마크 · 튜닝</b><span>통계로 비교하고 Optuna 로 탐색</span></div>
   </div>
 </section>''')
@@ -170,7 +171,7 @@ PAGES.append('''
 <section class="page">
   <header class="ph"><span>04</span>시뮬레이션 따라하기</header>
   <ol class="steps compact">
-    <li><b>맵 고르기</b> — 왼쪽 <b>맵</b> 탭에서 맵 카드를 누릅니다 (내 맵은 <b>맵 추가</b> 로, 12장). 아래 시나리오 목록에서 미리 만든 상황(정상 · 미등록 장애물 · 보행자 · 낮은·공중 장애물 · 단차)을 불러올 수도 있습니다.</li>
+    <li><b>맵 고르기</b> — 왼쪽 <b>맵</b> 탭에서 맵 카드를 누릅니다 (내 맵은 <b>맵 추가</b> 로, 13장). 아래 시나리오 목록에서 미리 만든 상황(정상 · 미등록 장애물 · 보행자 · 낮은·공중 장애물 · 단차)을 불러올 수도 있습니다.</li>
     <li><b>시작</b> — 오른쪽 위 <b>시뮬레이션 시작</b>. 약 4초 뒤 “실행 중” 이 됩니다. 차량형 로봇은 약 12초 걸립니다.</li>
     <li><b>출발점</b> — 출발점 도구(<kbd>S</kbd>)로 지도를 누른 채 끌면 로봇이 그 자리·방향으로 옮겨집니다.</li>
     <li><b>목표</b> — 목표 도구(<kbd>G</kbd>)로 누른 채 끌어 도착 방향을 정하면 바로 출발합니다.</li>
@@ -181,7 +182,7 @@ PAGES.append('''
   <table class="tbl tools">
     <tr><th>도구</th><th>키</th><th>사용법</th></tr>
     <tr><td>선택</td><td><kbd>V</kbd></td><td>장애물을 끌어 옮기고 <kbd>Delete</kbd> 로 지웁니다. 빈 곳을 끌면 화면 이동</td></tr>
-    <tr><td>박스</td><td><kbd>B</kbd></td><td>끌어서 사각형 장애물을 그립니다. 옵션에서 높이(일반 · 낮은 턱 · 문턱 · 공중, 9장)</td></tr>
+    <tr><td>박스</td><td><kbd>B</kbd></td><td>끌어서 사각형 장애물을 그립니다. 옵션에서 높이(일반 · 낮은 턱 · 문턱 · 공중, 10장)</td></tr>
     <tr><td>기둥</td><td><kbd>P</kbd></td><td>누르는 곳에 원기둥. 반지름·높이는 옵션에서</td></tr>
     <tr><td>단차</td><td><kbd>D</kbd></td><td>끌어서 바닥이 꺼진 곳(계단·낭떠러지)을 그립니다. 깊이는 옵션에서</td></tr>
     <tr><td>의자</td><td><kbd>C</kbd></td><td>지름 5 cm 다리 4개. 2D 라이다로는 잘 안 보이는 대표적인 장애물</td></tr>
@@ -296,10 +297,38 @@ PAGES.append('''
   </div>
 </section>''')
 
+# ---------------------------------------------------------------- 9. detection coverage (blind spots)
+PAGES.append('''
+<section class="page">
+  <header class="ph"><span>09</span>감지 범위 (사각지대 지도)</header>
+  <p>센서를 달았으면 “이 물체를 로봇 주변 어디서부터 감지하나, 멈출 수 있나” 를 확인합니다. 로봇이 서 있을 때 물체를 주변 칸마다 놓고, 각 센서의 광선 · 측정 · 인식 규칙을 시뮬레이션과 똑같이 돌려 감지되는 칸을 칠합니다.</p>
+  ''' + shot('robot_coverage.png', [('btn', 1, 'Bc'), ('probe', 2, 'mL'), ('summary', 3, 'mL'), ('corr', 4, 'mL'), ('legend', 5, 'mL'), ('hint', 6, 'tl')]) + legend([
+    ('감지 범위', '편집기 도구 막대에서 켜고 끕니다. 센서를 옮기거나 사양을 바꾸면 다시 계산합니다 (1~3초)'),
+    ('물체', '낮은 턱 · 문턱 · 공중 · 의자 다리 · 박스 · 단차. ‘물체 크기·높이’ 에서 크기·높이·깊이를 바꿉니다'),
+    ('요약', '정지 거리(최대 속도, 가속 한계, 반응 시간), 정면에서 처음 감지하는 거리, 로봇 주변 0.5 m 의 방향별 감지 비율'),
+    ('앞 통로', '로봇이 지나갈 폭을 줄마다: 정지 거리 밖에서 보임(초록) · 안에서만(노랑) · 못 봄(빨강). 지도 위 굵은 선이 정지 거리'),
+    ('범례', '센서별로 맡은 칸 수. 누르면 그 센서가 보는 칸만 보입니다'),
+    ('칸 색', '그 칸의 물체를 감지하는 센서 색. 빨간 빗금은 로봇 바로 옆 사각. 칸에 마우스를 올리면 감지하는 센서 이름이 나옵니다'),
+  ]) + '''
+  <div class="cols">
+    <div>''' + shot('coverage_lidar.png', [], '라이다만 있는 기본 로봇의 낮은 턱: 라이다가 5 cm 보다 높이 있어 어디서도 못 봅니다 (앞 통로 못 봄 100%, 둘레 전체가 빗금).', 'shot small') + '''</div>
+    <div>
+      <h3>읽는 법</h3>
+      <ul class="dots">
+        <li>앞 통로에 <b>못 봄</b> 이 있으면 그 폭의 물체에 부딪힙니다. 그쪽을 보는 센서를 더하거나 돌립니다.</li>
+        <li><b>늦음</b> 만 있으면 너무 늦게 봅니다. 센서를 더 멀리 보게 하거나(pitch 줄이기), 최대 속도를 낮추거나 감속을 키웁니다.</li>
+        <li>둘레 빗금이 넓으면 제자리 회전 · 후진 때 위험합니다.</li>
+        <li>문턱처럼 넘을 수 있는 높이(등반 높이 이하)는 감지할 필요가 없고, 인식 최소 높이(2 cm)보다 낮은 물체는 규칙에서 걸러집니다. 패널 아래 안내를 보세요.</li>
+      </ul>
+      <p class="note">서 있는 로봇의 한 장면이며, 인식 파라미터는 기본값입니다. 주행 중의 실제 결과는 시뮬레이션과 벤치마크(낮은·공중 장애물, 단차 시나리오)로 확인합니다.</p>
+    </div>
+  </div>
+</section>''')
+
 # ---------------------------------------------------------------- 9. low obstacles, drops, perception
 PAGES.append('''
 <section class="page">
-  <header class="ph"><span>09</span>낮은 장애물과 단차</header>
+  <header class="ph"><span>10</span>낮은 장애물과 단차</header>
   <p>2D 라이다는 자기 높이에 걸리는 것만 봅니다. 5 cm 턱, 테이블 상판, 계단 같은 단차는 바닥을 보는 센서와 인식 처리가 있어야 피합니다.</p>
   ''' + shot('sim_sensors.png', [('cliff', 1, 'mr'), ('opts', 2, 'tr', True), ('layers', 3, 'bl'), ('lowbox', 4, 'tl'), ('dropbox', 4, 'tr'), ('panel', 5, 'tl', True)]) + legend([
     ('단차 도구', '끌어서 바닥이 꺼진 곳을 그립니다 (빗금). 깊이는 옵션에서. 로봇 중심이 들어가면 떨어져 멈춥니다(낙하)'),
@@ -331,7 +360,7 @@ PAGES.append('''
 # ---------------------------------------------------------------- 8. benchmark
 PAGES.append('''
 <section class="page">
-  <header class="ph"><span>10</span>벤치마크</header>
+  <header class="ph"><span>11</span>벤치마크</header>
   <p>설정 여러 개를 같은 시나리오로 반복 주행해 어느 쪽이 나은지 숫자로 비교합니다. 파라미터를 바꾼 효과가 우연인지 확인할 때 씁니다.</p>
   <ol class="steps compact">
     <li><b>새 벤치마크</b> → 비교할 설정을 추가합니다 (현재 설정, <b>설정 세트·스택</b>, 동시 실행 중인 슬롯 전체). 첫 번째가 비교 기준입니다.</li>
@@ -359,7 +388,7 @@ PAGES.append('''
 # ---------------------------------------------------------------- 9. tuning
 PAGES.append('''
 <section class="page">
-  <header class="ph"><span>11</span>자동 튜닝</header>
+  <header class="ph"><span>12</span>자동 튜닝</header>
   <p>고른 파라미터들의 범위 안에서 Optuna(TPE)가 조합을 바꿔 가며 시나리오를 주행하고, 점수가 높은 조합을 찾습니다.</p>
   <div class="cols">
     <div>
@@ -381,7 +410,7 @@ PAGES.append('''
 # ---------------------------------------------------------------- 11. maps
 PAGES.append('''
 <section class="page">
-  <header class="ph"><span>12</span>맵 추가와 관리</header>
+  <header class="ph"><span>13</span>맵 추가와 관리</header>
   <p>기본 맵 4종 외에 ROS map_server 형식의 맵을 추가해 씁니다. 현장 맵처럼 저장소에 넣지 않는 맵도 각자 PC 에 추가하면 됩니다.</p>
   <div class="cols">
     <div>''' + shot('map_add.png', [], '맵 추가 창: 파일을 끌어다 놓거나 눌러서 고릅니다. 맵이 하나면 표시 이름을 정할 수 있습니다.', 'shot small') + '''</div>
@@ -426,7 +455,7 @@ navstudio maps remove site_a''') + '''
 # ---------------------------------------------------------------- 12. troubleshooting
 PAGES.append('''
 <section class="page">
-  <header class="ph"><span>13</span>문제 해결</header>
+  <header class="ph"><span>14</span>문제 해결</header>
   <h3>자주 묻는 것</h3>
   <table class="tbl faq">
     <tr><th>시작을 눌렀는데 “오류” 가 뜬다</th><td>오류 상자의 <b>로그 보기</b> 나 오른쪽 아래 <b>실행 로그</b> 에서 첫 ERROR 줄을 확인합니다. 고급 오버라이드에 잘못된 값을 넣었을 때 흔합니다. <b>모두 초기화</b> 후 다시 시작해 보세요.</td></tr>

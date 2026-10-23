@@ -13,7 +13,7 @@ import urllib.request
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
-B = 'http://localhost:8765'
+B = os.environ.get('NAVSTUDIO_URL', 'http://localhost:8765')
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'docs', 'media')
 os.makedirs(OUT, exist_ok=True)
 FPS, WIDTH, MAX_S = 2.0, 960, 120
